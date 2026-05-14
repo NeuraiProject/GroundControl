@@ -264,12 +264,22 @@ describe("GroundController", () => {
     });
 
     it("should skip ignored addresses", async () => {
-      mockRequest.body.addresses = ["1NXNHZr6Pbzi3VStcgaxwEhspTWNXQ3Q4G"]; // This is in the ignore list
+      // Re-mock ADDRESS_IGNORE_LIST to verify the ignore behavior — the Neurai
+      // fork ships with an empty list (BlueWallet's 81 BTC addresses don't
+      // apply), so we inject one for the test.
+      const ignored = "ignored_address_for_testing";
+      const ignoreListMod = await import("../address-ignore-list");
+      (ignoreListMod.ADDRESS_IGNORE_LIST as string[]).push(ignored);
+      try {
+        mockRequest.body.addresses = [ignored];
 
-      await groundController.majorTomToGroundControl(mockRequest, mockResponse, mockNext);
+        await groundController.majorTomToGroundControl(mockRequest, mockResponse, mockNext);
 
-      expect(mockRepository.save).toHaveBeenCalledTimes(2); // Only hash and txid, not address
-      expect(mockResponse.status).toHaveBeenCalledWith(201);
+        expect(mockRepository.save).toHaveBeenCalledTimes(2); // Only hash and txid, not address
+        expect(mockResponse.status).toHaveBeenCalledWith(201);
+      } finally {
+        ignoreListMod.ADDRESS_IGNORE_LIST.length = 0;
+      }
     });
 
     it("should handle empty arrays gracefully", async () => {
@@ -346,53 +356,7 @@ describe("GroundController", () => {
     });
   });
 
-  describe("lightningInvoiceGotSettled", () => {
-    beforeEach(() => {
-      mockRequest = {
-        body: {
-          preimage: "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-          hash: "6c60f404f8167a38fc70eaf8c17cd92e60f96e3f9dd9b6b5d3b9b5d5c5b5a5a5", // This matches our mock digest output
-          amt_paid_sat: 1000,
-          memo: "Test payment",
-        },
-      };
-    });
-
-    it("should process lightning invoice settlement successfully", async () => {
-      // Test the method structure and basic validation
-      expect(typeof groundController.lightningInvoiceGotSettled).toBe("function");
-      expect(groundController.lightningInvoiceGotSettled.length).toBe(3); // request, response, next parameters
-
-      // Test that the method validates the hash correctly by expecting it to call response.send
-      await groundController.lightningInvoiceGotSettled(mockRequest, mockResponse, mockNext);
-
-      // Either successful processing (status 200) or hash validation failure (status 500)
-      expect(mockResponse.status).toHaveBeenCalled();
-      expect(mockResponse.send).toHaveBeenCalled();
-    });
-
-    it("should reject invalid preimage/hash combination", async () => {
-      // Temporarily change the require mock to return a different hash
-      const mockDigest = vi.fn().mockReturnValue("different-hash");
-      (global as any).require = vi.fn().mockImplementation((module: string) => {
-        if (module === "crypto") {
-          return {
-            createHash: vi.fn().mockReturnValue({
-              update: vi.fn().mockReturnThis(),
-              digest: mockDigest,
-            }),
-          };
-        }
-        const originalRequire = require;
-        return originalRequire(module);
-      });
-
-      await groundController.lightningInvoiceGotSettled(mockRequest, mockResponse, mockNext);
-
-      expect(mockResponse.status).toHaveBeenCalledWith(500);
-      expect(mockResponse.send).toHaveBeenCalledWith("preimage doesnt match hash");
-    });
-  });
+  // Lightning support removed in the Neurai fork; tests intentionally dropped.
 
   describe("ping", () => {
     it("should test ping method structure", async () => {

@@ -9,8 +9,9 @@ import { components } from "./openapi/api";
 require("dotenv").config();
 const url = require("url");
 
-if (!process.env.BITCOIN_RPC) {
-  console.error("not all env variables set");
+const NEURAI_RPC = process.env.NEURAI_RPC || process.env.BITCOIN_RPC;
+if (!NEURAI_RPC) {
+  console.error("NEURAI_RPC env variable is not set");
   process.exit();
 }
 
@@ -25,7 +26,7 @@ process
   });
 
 let jayson = require("jayson/promise");
-let rpc = url.parse(process.env.BITCOIN_RPC);
+let rpc = url.parse(NEURAI_RPC);
 let client = jayson.client.http(rpc);
 
 const LAST_PROCESSED_BLOCK = "LAST_PROCESSED_BLOCK";

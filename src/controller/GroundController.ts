@@ -190,48 +190,6 @@ export class GroundController {
     response.status(201).send("");
   }
 
-  /**
-   * POST request handler that notifies us that specific ln invoice was paid
-   *
-   * @param request
-   * @param response
-   * @param next
-   */
-  async lightningInvoiceGotSettled(request: Request, response: Response, next: NextFunction) {
-    const body: paths["/lightningInvoiceGotSettled"]["post"]["requestBody"]["content"]["application/json"] = request.body;
-
-    const hashShouldBe = require("crypto").createHash("sha256").update(Buffer.from(body.preimage, "hex")).digest("hex");
-    if (hashShouldBe !== body.hash) {
-      response.status(500).send("preimage doesnt match hash");
-      return;
-    }
-
-    const tokenToHashAll = await this.tokenToHashRepository.find({
-      where: {
-        hash: hashShouldBe,
-      },
-    });
-    for (const tokenToHash of tokenToHashAll) {
-      process.env.VERBOSE && console.log("enqueueing to token", tokenToHash.token, tokenToHash.os);
-      const pushNotification: components["schemas"]["PushNotificationLightningInvoicePaid"] = {
-        sat: body.amt_paid_sat,
-        badge: 1,
-        type: 1,
-        level: "transactions",
-        os: tokenToHash.os === "android" ? "android" : "ios", //hacky
-        token: tokenToHash.token,
-        hash: hashShouldBe,
-        memo: body.memo,
-      };
-
-      await this.sendQueueRepository.save({
-        data: JSON.stringify(pushNotification),
-      });
-    }
-
-    response.status(200).send("");
-  }
-
   async ping(request: Request, response: Response, next: NextFunction) {
     const keyValueRepository = this._connection.getRepository(KeyValue);
     const sendQueueRepository = this._connection.getRepository(SendQueue);

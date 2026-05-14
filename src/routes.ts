@@ -26,12 +26,6 @@ export const Routes = [
     action: "setTokenConfiguration",
   },
   {
-    method: "post",
-    route: "/lightningInvoiceGotSettled",
-    controller: GroundController,
-    action: "lightningInvoiceGotSettled",
-  },
-  {
     method: "get",
     route: "/ping",
     controller: GroundController,

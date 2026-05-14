@@ -1,0 +1,83 @@
+version: "3.9"
+
+# Local development stack for groundcontrol-neurai.
+# Drop a `.env` next to this file (start from `.env.example`) before running.
+#
+#   docker compose up --build
+#
+# Then point the wallet's "Settings → Notifications → developer panel" GroundControl
+# URI at http://<host-ip>:3001 (or use `adb reverse tcp:3001 tcp:3001` for Android).
+
+services:
+  mariadb:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpw
+      MARIADB_DATABASE: groundcontrol
+      MARIADB_USER: groundcontrol
+      MARIADB_PASSWORD: secret
+    volumes:
+      - groundcontrol-mariadb-data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+
+  web:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - mariadb
+    environment:
+      JAWSDB_MARIA_URL: mysql://groundcontrol:secret@mariadb:3306/groundcontrol
+      NEURAI_RPC: ${NEURAI_RPC}
+      APNS_P8: ${APNS_P8}
+      APNS_P8_KID: ${APNS_P8_KID}
+      APPLE_TEAM_ID: ${APPLE_TEAM_ID}
+      APNS_TOPIC: ${APNS_TOPIC}
+      GOOGLE_KEY_FILE: ${GOOGLE_KEY_FILE}
+      GOOGLE_PROJECT_ID: ${GOOGLE_PROJECT_ID}
+      VERBOSE: ${VERBOSE}
+    command: npm start
+    ports:
+      - "3001:3001"
+
+  worker-blockprocessor:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - mariadb
+    environment:
+      JAWSDB_MARIA_URL: mysql://groundcontrol:secret@mariadb:3306/groundcontrol
+      NEURAI_RPC: ${NEURAI_RPC}
+      VERBOSE: ${VERBOSE}
+    command: npm run worker-blockprocessor
+
+  worker-processmempool:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - mariadb
+    environment:
+      JAWSDB_MARIA_URL: mysql://groundcontrol:secret@mariadb:3306/groundcontrol
+      NEURAI_RPC: ${NEURAI_RPC}
+      VERBOSE: ${VERBOSE}
+    command: npm run worker-processmempool
+
+  worker-sender:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - mariadb
+    environment:
+      JAWSDB_MARIA_URL: mysql://groundcontrol:secret@mariadb:3306/groundcontrol
+      APNS_P8: ${APNS_P8}
+      APNS_P8_KID: ${APNS_P8_KID}
+      APPLE_TEAM_ID: ${APPLE_TEAM_ID}
+      APNS_TOPIC: ${APNS_TOPIC}
+      GOOGLE_KEY_FILE: ${GOOGLE_KEY_FILE}
+      GOOGLE_PROJECT_ID: ${GOOGLE_PROJECT_ID}
+      VERBOSE: ${VERBOSE}
+    command: npm run worker-sender
+
+volumes:
+  groundcontrol-mariadb-data:

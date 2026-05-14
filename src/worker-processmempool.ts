@@ -7,14 +7,15 @@ import { components } from "./openapi/api";
 require("dotenv").config();
 const url = require("url");
 let jayson = require("jayson/promise");
-let rpc = url.parse(process.env.BITCOIN_RPC);
+const NEURAI_RPC = process.env.NEURAI_RPC || process.env.BITCOIN_RPC;
+if (!NEURAI_RPC) {
+  console.error("NEURAI_RPC env variable is not set");
+  process.exit();
+}
+let rpc = url.parse(NEURAI_RPC);
 let client = jayson.client.http(rpc);
 
 let processedTxids = {};
-if (!process.env.BITCOIN_RPC) {
-  console.error("not all env variables set");
-  process.exit();
-}
 
 process
   .on("unhandledRejection", (reason, p) => {
