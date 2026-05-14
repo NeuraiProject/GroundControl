@@ -6,9 +6,6 @@ import { Request, Response, NextFunction } from "express";
 vi.mock("../entity/TokenToAddress", () => ({
   TokenToAddress: class TokenToAddress {},
 }));
-vi.mock("../entity/TokenToHash", () => ({
-  TokenToHash: class TokenToHash {},
-}));
 vi.mock("../entity/TokenToTxid", () => ({
   TokenToTxid: class TokenToTxid {},
 }));
@@ -166,7 +163,6 @@ describe("GroundController", () => {
 
     // Mock the connection property by directly setting repositories
     (groundController as any)._tokenToAddressRepository = mockRepository;
-    (groundController as any)._tokenToHashRepository = mockRepository;
     (groundController as any)._tokenToTxidRepository = mockRepository;
     (groundController as any)._tokenConfigurationRepository = mockRepository;
     (groundController as any)._sendQueueRepository = mockRepository;
@@ -180,12 +176,6 @@ describe("GroundController", () => {
   describe("Repository getters", () => {
     it("should return tokenToAddressRepository", () => {
       const repo = groundController.tokenToAddressRepository;
-      expect(repo).toBeDefined();
-      expect(repo).toBe(mockRepository);
-    });
-
-    it("should return tokenToHashRepository", () => {
-      const repo = groundController.tokenToHashRepository;
       expect(repo).toBeDefined();
       expect(repo).toBe(mockRepository);
     });
@@ -215,24 +205,18 @@ describe("GroundController", () => {
         body: {
           token: "test-token",
           os: "ios",
-          addresses: ["bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"],
-          hashes: ["hash123"],
+          addresses: ["nq1qexampleneuraiaddress0000000000000000000"],
           txids: ["txid123"],
         },
       };
     });
 
-    it("should save addresses, hashes, and txids successfully", async () => {
+    it("should save addresses and txids successfully", async () => {
       await groundController.majorTomToGroundControl(mockRequest, mockResponse, mockNext);
 
-      expect(mockRepository.save).toHaveBeenCalledTimes(3);
+      expect(mockRepository.save).toHaveBeenCalledTimes(2);
       expect(mockRepository.save).toHaveBeenCalledWith({
-        address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
-        token: "test-token",
-        os: "ios",
-      });
-      expect(mockRepository.save).toHaveBeenCalledWith({
-        hash: "hash123",
+        address: "nq1qexampleneuraiaddress0000000000000000000",
         token: "test-token",
         os: "ios",
       });
@@ -275,7 +259,7 @@ describe("GroundController", () => {
 
         await groundController.majorTomToGroundControl(mockRequest, mockResponse, mockNext);
 
-        expect(mockRepository.save).toHaveBeenCalledTimes(2); // Only hash and txid, not address
+        expect(mockRepository.save).toHaveBeenCalledTimes(1); // Only txid, not address
         expect(mockResponse.status).toHaveBeenCalledWith(201);
       } finally {
         ignoreListMod.ADDRESS_IGNORE_LIST.length = 0;
@@ -284,7 +268,6 @@ describe("GroundController", () => {
 
     it("should handle empty arrays gracefully", async () => {
       mockRequest.body.addresses = [];
-      mockRequest.body.hashes = [];
       mockRequest.body.txids = [];
 
       await groundController.majorTomToGroundControl(mockRequest, mockResponse, mockNext);
@@ -295,7 +278,6 @@ describe("GroundController", () => {
 
     it("should handle missing arrays by defaulting to empty arrays", async () => {
       mockRequest.body.addresses = undefined;
-      mockRequest.body.hashes = undefined;
       mockRequest.body.txids = undefined;
 
       await groundController.majorTomToGroundControl(mockRequest, mockResponse, mockNext);
@@ -311,26 +293,23 @@ describe("GroundController", () => {
         body: {
           token: "test-token",
           os: "ios",
-          addresses: ["bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"],
-          hashes: ["hash123"],
+          addresses: ["nq1qexampleneuraiaddress0000000000000000000"],
           txids: ["txid123"],
         },
       };
     });
 
-    it("should remove addresses, hashes, and txids successfully", async () => {
-      const mockAddressRecord = { id: 1, address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh" };
-      const mockHashRecord = { id: 2, hash: "hash123" };
+    it("should remove addresses and txids successfully", async () => {
+      const mockAddressRecord = { id: 1, address: "nq1qexampleneuraiaddress0000000000000000000" };
       const mockTxidRecord = { id: 3, txid: "txid123" };
 
-      mockRepository.findOneBy.mockResolvedValueOnce(mockAddressRecord).mockResolvedValueOnce(mockHashRecord).mockResolvedValueOnce(mockTxidRecord);
+      mockRepository.findOneBy.mockResolvedValueOnce(mockAddressRecord).mockResolvedValueOnce(mockTxidRecord);
 
       await groundController.unsubscribe(mockRequest, mockResponse, mockNext);
 
-      expect(mockRepository.findOneBy).toHaveBeenCalledTimes(3);
-      expect(mockRepository.remove).toHaveBeenCalledTimes(3);
+      expect(mockRepository.findOneBy).toHaveBeenCalledTimes(2);
+      expect(mockRepository.remove).toHaveBeenCalledTimes(2);
       expect(mockRepository.remove).toHaveBeenCalledWith(mockAddressRecord);
-      expect(mockRepository.remove).toHaveBeenCalledWith(mockHashRecord);
       expect(mockRepository.remove).toHaveBeenCalledWith(mockTxidRecord);
       expect(mockResponse.status).toHaveBeenCalledWith(201);
     });
@@ -349,8 +328,8 @@ describe("GroundController", () => {
 
       await groundController.unsubscribe(mockRequest, mockResponse, mockNext);
 
-      expect(mockRepository.findOneBy).toHaveBeenCalledTimes(3);
-      expect(mockRepository.remove).toHaveBeenCalledTimes(3);
+      expect(mockRepository.findOneBy).toHaveBeenCalledTimes(2);
+      expect(mockRepository.remove).toHaveBeenCalledTimes(2);
       expect(mockRepository.remove).toHaveBeenCalledWith(null);
       expect(mockResponse.status).toHaveBeenCalledWith(201);
     });

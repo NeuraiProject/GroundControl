@@ -7,7 +7,7 @@ import { components } from "./openapi/api";
 require("dotenv").config();
 const url = require("url");
 let jayson = require("jayson/promise");
-const NEURAI_RPC = process.env.NEURAI_RPC || process.env.BITCOIN_RPC;
+const NEURAI_RPC = process.env.NEURAI_RPC;
 if (!NEURAI_RPC) {
   console.error("NEURAI_RPC env variable is not set");
   process.exit();
@@ -46,7 +46,7 @@ async function processMempool() {
     if (!processedTxids[txid]) rpcBatch.push(client.request("getrawtransaction", [txid, true], undefined, false));
     if (rpcBatch.length >= batchSize || countTxidsProcessed === responseGetrawmempool.result.length) {
       const startBatch = +new Date();
-      // got enough txids lets batch fetch them from bitcoind rpc
+      // got enough txids - batch fetch them from the Neurai RPC
       const responses = await client.request(rpcBatch);
       for (const response of responses) {
         if (response.result && response.result.vout) {

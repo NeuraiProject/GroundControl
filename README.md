@@ -1,108 +1,69 @@
-# Ground Control
+# Ground Control (Neurai)
 
-`````````````````````````````````````````````````````````````````
-///::---......```````````````````````````````` ``````````````````````````````````````...............
-::::---.....```````````````````````````````` .-.-`-```..```````````````````````````````.............
-:::---....````````````````````````.-.``--```.///////:/+/:/---....``````````````````````.............
-::---....``````````````````````````://::/:..//////////+++++++++++:--..``````````````````............
-:---...````````````````````````.///////////////////////+++++++++++ooo+:-```````````````````.........
----...``````````````````````.-////////////////////////+//+++++++++oooo/-.```````````````````........
---...````````````````````.-////////////////////////////+/++++++++oooooo++/.````````````````````.....
--...````````````````````-:/+//////////////////////////+++++++++++oooooooooo:````````````````````....
-...````````````````````:++++///////////////////////////++++++++++ooooooooooo+-```````````````````...
-..```````````````````-/+++++//////////////////////////+++++++++++ooooooooooooo:````````````````````.
-.``````````````````./+++++++//////////////////////////+++++++++++oooooooooooooo/````````````````````
-.`````````````````./+++++++++++////////////////////////+++++++++++oooooooooooooo.``````````````````.
-``````````````````.+++++++++++/////////////////////////++++++++++++ooooooooooooo-```````````````````
-```````````````````-++++++++++//////////////////////////++++++++++++oooooooooooo/```````````````````
-````````````````````/++++//++//////////////////////////////://++/-++oooooooooooo:```````````````````
-````````````````````-/+//////////////////////////////////:-.`../..++oooooooooooo-```````````````````
-`````````````````````//+///////////::::::::::://///////////-.`````/++ooooooooooo:```````````````````
-``````````````````  `:////////:-.````````````.://////////+++///:-``-://+oooooooo:```````````````````
-``````````````````   -/////:.``            `-////////////+++++:-``````:+oooooooo-```````````````````
-```````````````````  :++/:``             `-//////////////++/:.````````.+oooooooo.```````````````````
-```````````````````` .++/.              .:////////////////-``   ```````.++ooooo+````````````````````
-`````````````````````.++/`            `-///////////////:.`      ````````-+ooooo/````````````````````
-`````````````````````.++:            `://////////////:.`         ````````/++ooo:````````````````````
-`````````````````````.++-           `://///////////-.`            ```````-+++oo-````````````````````
-`````````````````````-++.          `/////////////:`               ```````.+++oo.````````````````````
-`````````````````````:++.         `:////////////.`  ````           ```````+++oo.````````````````````
-`````````````````````/o+.``       `--:////////:``.--.````````      ```````++++o-````````````````````
-`````````````````````/oo.```  `...:-::.-://///-://-``--:::://:-.` ````````++++o:````````````````````
-`````````````````````/oo-`````.-``-.-:```://////-` `.`````--:/:::. ``````.++++o-````````````````````
-`````````````````````:oo:``````---.--.-:://///:`      `````----:-` ``````-+++++`````````````````````
-`````````````````````:oo+```````:++/:-://////-`         ``...-.``  ``````/+++++.````````````````````
-``````````````````````:+o-`````:+/-``-//////.                     ```````+++++/`````````````````````
-```````````````````````:+/````-:.` `-++++//.                      ``````.//+/+:`````````````````````
-````````````````````````.+:````````-+++++:`                       `````````.::``````````````````````
-`````````````````````````.:.``````.++++/-`                     `````````````/.``````````````````````
-```````````````````````````:``````/+++/.   ..    .:.       ````````````````:/```````````````````````
-```````````````````````````/`````.+++:`    ``    ```    `````````````````.:+-```````````````````````
-```````````````````````````/-````/++-```             ````````````````-//++++````````````````````````
-```````````````````````````/-````+o:````           `````````````````.++++++/````````````````````````
-```````````````````````````/:```.++```````.--.``..``````````````````/+o++++:````````````````````````
-```````````````````````````//```.o:````.://///:::/:::-.````````````-+++++++/````````````````````````
-```````````````````````````+o-``-o-````..``.......````````````````-/+ooooo++````````````````````````
-``````````````````````````-oo+.`:o.`````....`````````````````````::.+ooooo++.```````````````````````
-`````````````````````````.+ooo+.:+.`````````......`````````````.:-``+ooooo+:-```````````````````````
-`````````````````````````/ooooo-/+````````````````````````````--```.+oooooo/````````````````````````
-````````````````````````/oooooo./+`````````````````````````````````.oooooo/+````````````````````````
-```````````````````````:ooo++o+`/+`````````````````````````````````.oooo+/:`````````````````````````
-``````````````````````.:+/:-//-`++`````````````````````````````````.oooo-`.`````````````````````````
-....````````````````````````.```+/``````````````````````````````````+oo:````````````````````````````
-.....``````````````````````````.+/``````````````````````````````````:+-`````````````````````````````
-......`````````````````````````.+:````````````````````````````````````````````````````````````````..
-.........``````````````````````-+:``````````````````````````````````````````````````````````````....
-...........````````````````````-o-`````````````````````````````````````````````````````````````.....
-.............``````````````````:o-```````````````````````````````````````````````````````````.......
-...............````````````````:o-`````````````````````````````````````````````````````````.........
-................```````````````/o.```````````````````````````````````````````````````````...........
-....................``..```````/+.``````````````````````````````````````````````````.`..............
-...........................````:/``````````````````````````````````````.``..........................
-.............................`.//````````````````````````````````````...............................
-----..........................`..``````````````````````````````.....................................
-`````````````````````````````````````````````````````````````````
+Push notifications server for **NeuraiWallet**. Watches the Neurai blockchain (blocks & mempool) for transactions paying any subscribed on-chain address and dispatches FCM (Android) / APNs (iOS) push notifications.
 
-## Can you hear me, Major Tom?
+Forked from [BlueWallet/GroundControl](https://github.com/BlueWallet/GroundControl). Lightning support, Bitcoin RPC integration and BlueWallet-specific defaults have been removed; the chain-watcher is now wired to a Neurai full node.
 
-Push notifications server for bitcoin wallets. Processes blocks & mempool in search of subscribed onchain addresses.
-Built with typescript, expressjs, mariadb & [openapi](https://editor.swagger.io/?url=https://raw.githubusercontent.com/BlueWallet/GroundControl/master/openapi.yaml).
+Built with TypeScript, Express, MariaDB and an OpenAPI spec (`openapi.yaml`).
 
-In memory of David Bowie
+> In memory of David Bowie.
 
-### Installation
+## Architecture
 
-```shell script
+Four processes that share a MariaDB instance:
+
+- `web` — HTTP API (`/majorTomToGroundControl`, `/unsubscribe`, `/setTokenConfiguration`, …).
+- `worker-blockprocessor` — polls the Neurai node for new blocks, scans tx outputs, enqueues pushes for subscribed addresses/txids.
+- `worker-processmempool` — same logic against unconfirmed transactions.
+- `worker-sender` — pulls from the queue and dispatches via FCM/APNs.
+
+## Installation
+
+```shell
 npm i
-npm start
-npm run worker-blockprocessor
-npm run worker-processmempool
-npm run worker-sender
+npm start                              # HTTP API
+npm run worker-blockprocessor          # block scanner
+npm run worker-processmempool          # mempool scanner
+npm run worker-sender                  # FCM/APNs dispatcher
 ```
 
-Works well on Heroku (you'll need `JawsDB Maria` addon)
+Or via Docker Compose (recommended for local + production):
 
-### Environment variables
+```shell
+cp .env.example .env                   # fill in the credentials
+docker compose up --build
+```
 
-Set them as env variables or put them into `.env` file in project root dir.
+## Environment variables
 
-- `JAWSDB_MARIA_URL` for example `mysql://username:password@host:port/database`
-- ~~`FCM_SERVER_KEY` hex encoded~~ deprecated (in favor of json key file) after FCM XMPP and HTTP legacy APIs was deprecated; the new one is HTTP v1 API; theres also a new uri to post payload
-- `APNS_P8` hex encoded
-- `APNS_P8_KID` issuer key which is "key ID" of your p8 file
-- `APPLE_TEAM_ID` "team ID" of your developer account
-- `BITCOIN_RPC` for example `http://username:password@host:8332`
-- `APNS_TOPIC` for example `io.bluewallet.bluewallet`
-- `GOOGLE_KEY_FILE` - json file with Google key for FCM, in hex
-- `GOOGLE_PROJECT_ID` - acquired with the key file
+Copy `.env.example` and fill in the real values.
 
-### Getting certificates
+- `JAWSDB_MARIA_URL` — MariaDB connection URL, e.g. `mysql://user:pass@host:3306/groundcontrol`.
+- `NEURAI_RPC` — Neurai full-node RPC URL, e.g. `http://user:pass@127.0.0.1:9817`.
+- `APNS_P8` — hex-encoded contents of the APNs `.p8` key file from Apple Developer.
+- `APNS_P8_KID` — "Key ID" of that `.p8`.
+- `APPLE_TEAM_ID` — Team ID of the Apple developer account.
+- `APNS_TOPIC` — iOS bundle ID, currently `io.bluewallet.bluewallet` (the Xcode target is still named BlueWallet inside the wallet repo; update when that gets renamed).
+- `GOOGLE_KEY_FILE` — hex-encoded Firebase service-account JSON key.
+- `GOOGLE_PROJECT_ID` — Firebase project id paired with the key file.
+- `VERBOSE` — non-empty for verbose logging.
 
-- outdated https://dev.to/jakubkoci/react-native-push-notifications-313i
-- https://stackoverflow.com/questions/44631803/ios-swift-how-to-create-p8-file/67533665#67533665
-- get P8 hex `xxd -p file.p8 | tr -d '\n'` (google key file as well)
-- https://firebase.google.com/docs/cloud-messaging/migrate-v1
+## Getting certificates
 
-### License
+- APNs `.p8` (Apple Developer → Keys → "Push Notifications"). Encode to hex: `xxd -p file.p8 | tr -d '\n'`.
+- Firebase service-account JSON (Firebase console → Project Settings → Service Accounts). Encode to hex the same way.
+- See [Firebase: migrate to HTTP v1](https://firebase.google.com/docs/cloud-messaging/migrate-v1) for context.
+
+## OpenAPI
+
+Swagger UI: [editor.swagger.io with this spec](https://editor.swagger.io/) — paste `openapi.yaml`.
+
+Regenerate the TypeScript types after editing the spec:
+
+```shell
+npm run openapi
+```
+
+## License
 
 MIT

@@ -9,9 +9,6 @@ vi.mock("../entity/PushLog", () => ({
 vi.mock("../entity/TokenToAddress", () => ({
   TokenToAddress: class TokenToAddress {},
 }));
-vi.mock("../entity/TokenToHash", () => ({
-  TokenToHash: class TokenToHash {},
-}));
 vi.mock("../entity/TokenToTxid", () => ({
   TokenToTxid: class TokenToTxid {},
 }));
@@ -37,7 +34,6 @@ describe("GroundControlToMajorTom", () => {
   let GroundControlToMajorTom: any;
   let PushLog: any;
   let TokenToAddress: any;
-  let TokenToHash: any;
   let TokenToTxid: any;
 
   beforeEach(async () => {
@@ -77,9 +73,9 @@ describe("GroundControlToMajorTom", () => {
     const groundControlModule = await import("../class/GroundControlToMajorTom");
     GroundControlToMajorTom = groundControlModule.GroundControlToMajorTom;
 
-    const entityModules = await Promise.all([import("../entity/PushLog"), import("../entity/TokenToAddress"), import("../entity/TokenToHash"), import("../entity/TokenToTxid")]);
+    const entityModules = await Promise.all([import("../entity/PushLog"), import("../entity/TokenToAddress"), import("../entity/TokenToTxid")]);
 
-    [PushLog, TokenToAddress, TokenToHash, TokenToTxid] = entityModules.map((m) => Object.values(m)[0]);
+    [PushLog, TokenToAddress, TokenToTxid] = entityModules.map((m) => Object.values(m)[0]);
   });
 
   afterEach(() => {
@@ -374,64 +370,7 @@ describe("GroundControlToMajorTom", () => {
     });
   });
 
-  describe("pushLightningInvoicePaid", () => {
-    const mockPushNotification: components["schemas"]["PushNotificationLightningInvoicePaid"] = {
-      type: 1,
-      token: "mock-token",
-      os: "android",
-      badge: 4,
-      level: "transactions",
-      sat: 25000,
-      hash: "abcdef123456789",
-      memo: "Payment for services",
-    };
-
-    it("should call FCM for Android devices with memo", async () => {
-      const mockFcmPush = vi.spyOn(GroundControlToMajorTom as any, "_pushToFcm").mockResolvedValue(undefined);
-
-      await GroundControlToMajorTom.pushLightningInvoicePaid(mockDataSource, "server-key", "apns-p8", mockPushNotification);
-
-      expect(mockFcmPush).toHaveBeenCalledWith(
-        mockDataSource,
-        "server-key",
-        "mock-token",
-        expect.objectContaining({
-          message: expect.objectContaining({
-            data: expect.objectContaining({
-              badge: "4",
-              tag: "abcdef123456789",
-            }),
-            notification: expect.objectContaining({
-              title: "+25000 sats",
-              body: "Paid: Payment for services",
-            }),
-          }),
-        }),
-        mockPushNotification
-      );
-    });
-
-    it("should handle missing memo gracefully", async () => {
-      const notificationWithoutMemo = { ...mockPushNotification, memo: undefined };
-      const mockFcmPush = vi.spyOn(GroundControlToMajorTom as any, "_pushToFcm").mockResolvedValue(undefined);
-
-      await GroundControlToMajorTom.pushLightningInvoicePaid(mockDataSource, "server-key", "apns-p8", notificationWithoutMemo);
-
-      expect(mockFcmPush).toHaveBeenCalledWith(
-        mockDataSource,
-        "server-key",
-        "mock-token",
-        expect.objectContaining({
-          message: expect.objectContaining({
-            notification: expect.objectContaining({
-              body: "Paid: your invoice",
-            }),
-          }),
-        }),
-        notificationWithoutMemo
-      );
-    });
-  });
+  // Lightning support removed in the Neurai fork; tests intentionally dropped.
 
   describe("killDeadToken", () => {
     it("should delete token from all related repositories", async () => {
@@ -441,10 +380,9 @@ describe("GroundControlToMajorTom", () => {
 
       expect(mockDataSource.getRepository).toHaveBeenCalledWith(TokenToAddress);
       expect(mockDataSource.getRepository).toHaveBeenCalledWith(TokenToTxid);
-      expect(mockDataSource.getRepository).toHaveBeenCalledWith(TokenToHash);
-      expect(mockQueryBuilder.delete).toHaveBeenCalledTimes(3);
+      expect(mockQueryBuilder.delete).toHaveBeenCalledTimes(2);
       expect(mockQueryBuilder.where).toHaveBeenCalledWith("token = :token", { token: mockToken });
-      expect(mockQueryBuilder.execute).toHaveBeenCalledTimes(3);
+      expect(mockQueryBuilder.execute).toHaveBeenCalledTimes(2);
     });
   });
 

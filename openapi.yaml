@@ -1,28 +1,15 @@
 openapi: 3.0.0
 info:
-  title: GroundControl push server API
-  description: Push notifications server for BlueWallet
+  title: GroundControl push server API for NeuraiWallet
+  description: Push notifications server that watches the Neurai chain for incoming on-chain payments and dispatches FCM/APNs pushes to subscribed wallets.
   version: 0.0.13
 servers:
   - url: http://localhost:3001
-  - url: https://groundcontrol-bluewallet-stg.herokuapp.com
-  - url: https://groundcontrol-bluewallet.herokuapp.com
+  - url: https://groundcontrol.neurai.org
 paths:
-  /lightningInvoiceGotSettled:
-    post:
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LightningInvoiceSettledNotification"
-      responses:
-        "200":
-          description: OK
-
   /majorTomToGroundControl:
     post:
-      summary: "Associate bitcoin addressess / ln preimage hashes / txids that you wish to be notified about to specific push token. Token serves as unique identifier of a device/user. Also, OS of the token"
+      summary: "Associate Neurai on-chain addresses / txids you wish to be notified about with a specific push token. Token serves as unique identifier of a device/user. Also, OS of the token"
       requestBody:
         required: true
         content:
@@ -31,10 +18,6 @@ paths:
               type: object
               properties:
                 addresses:
-                  type: array
-                  items:
-                    type: string
-                hashes:
                   type: array
                   items:
                     type: string
@@ -52,7 +35,7 @@ paths:
 
   /unsubscribe:
     post:
-      summary: "This call is a reverse call for /majorTomToGroundControl. In case user doesnt want to track addresses/txids/ln invoice hashes, he makes this call along with his token/os so GroundControl can remove them from the database"
+      summary: "Reverse of /majorTomToGroundControl. Removes the given addresses/txids from the device's subscription set."
       requestBody:
         required: true
         content:
@@ -61,10 +44,6 @@ paths:
               type: object
               properties:
                 addresses:
-                  type: array
-                  items:
-                    type: string
-                hashes:
                   type: array
                   items:
                     type: string
@@ -144,7 +123,6 @@ paths:
           application/json:
             schema:
               oneOf:
-                - $ref: "#/components/schemas/PushNotificationLightningInvoicePaid"
                 - $ref: "#/components/schemas/PushNotificationOnchainAddressGotPaid"
                 - $ref: "#/components/schemas/PushNotificationOnchainAddressGotUnconfirmedTransaction"
                 - $ref: "#/components/schemas/PushNotificationTxidGotConfirmed"
@@ -198,23 +176,6 @@ components:
         app_version:
           type: "string"
 
-    LightningInvoiceSettledNotification:
-      description: object thats posted to GroundControl to notify end-user that his specific invoice was paid by someone
-      type: "object"
-      properties:
-        memo:
-          type: "string"
-          description: "text that was embedded in invoice paid"
-        preimage:
-          type: "string"
-          description: "hex string preimage"
-        hash:
-          type: "string"
-          description: "hex string preimage hash"
-        amt_paid_sat:
-          type: "number"
-          description: "exactly how much satoshis was paid to make this invoice settked (>= invoice amount)"
-
     PushNotificationBase:
       description: payload for push notification delivered to phone
       type: object
@@ -227,14 +188,12 @@ components:
         "type":
           type: "integer"
           enum:
-            - 1
             - 2
             - 3
             - 4
             - 5
           description: >
             type:
-             * `1` - Your lightning invoice was paid
              * `2` - New transaction to one of your addresses
              * `3` - New unconfirmed transaction to one of your addresses
              * `4` - Transaction confirmed
@@ -250,31 +209,6 @@ components:
           type: "integer"
         level:
           $ref: "#/components/schemas/NotificationLevel"
-
-    PushNotificationLightningInvoicePaid:
-      allOf: # Combines PushNotificationBase and the inline model
-        - $ref: "#/components/schemas/PushNotificationBase"
-        - type: object
-          required:
-            - sat
-            - hash
-            - memo
-          properties:
-            type:
-              type: "integer"
-              enum: [1]
-            level:
-              type: "string"
-              enum: ["transactions"]
-            sat:
-              type: "integer"
-              description: amount of satoshis
-            hash:
-              type: "string"
-              description: hash of specific ln invoice preimage
-            memo:
-              type: "string"
-              description: text attached to bolt11
 
     PushNotificationOnchainAddressGotPaid:
       allOf: # Combines PushNotificationBase and the inline model
@@ -293,13 +227,13 @@ components:
               enum: ["transactions"]
             sat:
               type: "integer"
-              description: amount of satoshis
+              description: "amount in the smallest XNA unit (1 XNA = 100,000,000 sat)"
             address:
               type: "string"
-              description: user's onchain address that has incoming transaction
+              description: "user's Neurai on-chain address that has an incoming transaction"
             txid:
               type: "string"
-              description: txid of the transaction where this address is one of the outputs
+              description: "txid of the transaction where this address is one of the outputs"
 
     PushNotificationOnchainAddressGotUnconfirmedTransaction:
       allOf: # Combines PushNotificationBase and the inline model
@@ -318,13 +252,13 @@ components:
               enum: ["transactions"]
             sat:
               type: "integer"
-              description: amount of satoshis
+              description: "amount in the smallest XNA unit (1 XNA = 100,000,000 sat)"
             address:
               type: "string"
-              description: user's onchain address that has incoming transaction
+              description: "user's Neurai on-chain address that has an incoming transaction"
             txid:
               type: "string"
-              description: txid of the transaction where this address is one of the outputs
+              description: "txid of the transaction where this address is one of the outputs"
 
     PushNotificationTxidGotConfirmed:
       allOf: # Combines PushNotificationBase and the inline model
@@ -341,7 +275,7 @@ components:
               enum: ["transactions"]
             txid:
               type: "string"
-              description: txid of the transaction that got confirmed
+              description: "txid of the transaction that got confirmed"
 
     PushNotificationMessage:
       allOf: # Combines PushNotificationBase and the inline model
@@ -355,4 +289,4 @@ components:
               enum: [5]
             text:
               type: "string"
-              description: custom text thats displayed on push notification buble
+              description: "custom text displayed on the push notification bubble"

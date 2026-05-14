@@ -9,7 +9,7 @@ import { components } from "./openapi/api";
 require("dotenv").config();
 const url = require("url");
 
-const NEURAI_RPC = process.env.NEURAI_RPC || process.env.BITCOIN_RPC;
+const NEURAI_RPC = process.env.NEURAI_RPC;
 if (!NEURAI_RPC) {
   console.error("NEURAI_RPC env variable is not set");
   process.exit();
@@ -148,7 +148,7 @@ dataSource
       } catch (error) {
         console.warn("exception when processing block:", error, "continuing as usuall");
         if (error.message.includes("socket hang up")) {
-          // issue fetching block from bitcoind
+          // issue fetching block from the Neurai node
           console.warn("retrying block number", nextBlockToProcess);
           continue; // skip overwriting `LAST_PROCESSED_BLOCK` in `KeyValue` table
         }

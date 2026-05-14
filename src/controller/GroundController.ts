@@ -1,7 +1,6 @@
 import { DataSource } from "typeorm";
 import { NextFunction, Request, Response } from "express";
 import { TokenToAddress } from "../entity/TokenToAddress";
-import { TokenToHash } from "../entity/TokenToHash";
 import { TokenToTxid } from "../entity/TokenToTxid";
 import { TokenConfiguration } from "../entity/TokenConfiguration";
 import { SendQueue } from "../entity/SendQueue";
@@ -21,7 +20,6 @@ const LAST_PROCESSED_BLOCK = "LAST_PROCESSED_BLOCK";
 
 export class GroundController {
   private _tokenToAddressRepository;
-  private _tokenToHashRepository;
   private _tokenToTxidRepository;
   private _tokenConfigurationRepository;
   private _sendQueueRepository;
@@ -38,14 +36,6 @@ export class GroundController {
 
     this._tokenToAddressRepository = this._connection.getRepository(TokenToAddress);
     return this._tokenToAddressRepository;
-  }
-
-  get tokenToHashRepository() {
-    if (this._tokenToHashRepository) {
-      return this._tokenToHashRepository;
-    }
-    this._tokenToHashRepository = this._connection.getRepository(TokenToHash);
-    return this._tokenToHashRepository;
   }
 
   get tokenToTxidRepository() {
@@ -76,7 +66,7 @@ export class GroundController {
   }
 
   /**
-   * Submit bitcoin addressess that you wish to be notified about to specific push token. Token serves as unique identifier of a device/user. Also, OS of the token
+   * Submit Neurai on-chain addresses you wish to be notified about, associated to a specific push token. The token (FCM/APNs) and its OS identify the device.
    *
    * @param request
    * @param response
@@ -89,9 +79,6 @@ export class GroundController {
 
     if (!body.addresses || !Array.isArray(body.addresses)) {
       body.addresses = [];
-    }
-    if (!body.hashes || !Array.isArray(body.hashes)) {
-      body.hashes = [];
     }
     if (!body.txids || !Array.isArray(body.txids)) {
       body.txids = [];
@@ -108,24 +95,11 @@ export class GroundController {
         continue;
       }
 
-      // todo: validate bitcoin address
+      // todo: validate Neurai address
       console.log(body.token, "->", address);
       try {
         await this.tokenToAddressRepository.save({
           address,
-          token: body.token,
-          os: body.os,
-        });
-      } catch (_) {}
-    }
-
-    // todo: refactor into single batch save
-    for (const hash of body.hashes) {
-      // todo: validate hash
-      console.log(body.token, "->", hash);
-      try {
-        await this.tokenToHashRepository.save({
-          hash,
           token: body.token,
           os: body.os,
         });
@@ -154,9 +128,6 @@ export class GroundController {
     if (!body.addresses || !Array.isArray(body.addresses)) {
       body.addresses = [];
     }
-    if (!body.hashes || !Array.isArray(body.hashes)) {
-      body.hashes = [];
-    }
     if (!body.txids || !Array.isArray(body.txids)) {
       body.txids = [];
     }
@@ -170,13 +141,6 @@ export class GroundController {
       try {
         const addressRecord = await this.tokenToAddressRepository.findOneBy({ os: body.os, token: body.token, address });
         await this.tokenToAddressRepository.remove(addressRecord);
-      } catch (_) {}
-    }
-
-    for (const hash of body.hashes) {
-      try {
-        const hashRecord = await this.tokenToHashRepository.findOneBy({ os: body.os, token: body.token, hash });
-        await this.tokenToHashRepository.remove(hashRecord);
       } catch (_) {}
     }
 

@@ -118,12 +118,6 @@ dataSource
           await GroundControlToMajorTom.pushOnchainAddressGotUnconfirmedTransaction(connection, await GroundControlToMajorTom.getGoogleCredentials(), GroundControlToMajorTom.getApnsJwtToken(), payload);
           await sendQueueRepository.remove(record);
           break;
-        case 1:
-          payload = <components["schemas"]["PushNotificationLightningInvoicePaid"]>payload;
-          process.env.VERBOSE && console.log("pushing to token", payload.token, payload.os);
-          await GroundControlToMajorTom.pushLightningInvoicePaid(connection, await GroundControlToMajorTom.getGoogleCredentials(), GroundControlToMajorTom.getApnsJwtToken(), payload);
-          await sendQueueRepository.remove(record);
-          break;
         case 4:
           payload = <components["schemas"]["PushNotificationTxidGotConfirmed"]>payload;
           process.env.VERBOSE && console.log("pushing to token", payload.token, payload.os);
