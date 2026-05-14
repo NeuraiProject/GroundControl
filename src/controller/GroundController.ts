@@ -89,6 +89,12 @@ export class GroundController {
       return;
     }
 
+    if (body.chain !== "mainnet" && body.chain !== "testnet") {
+      response.status(400).send("chain must be 'mainnet' or 'testnet'");
+      return;
+    }
+    const chain: string = body.chain;
+
     // todo: refactor into single batch save
     for (const address of body.addresses) {
       if (ADDRESS_IGNORE_LIST.includes(address)) {
@@ -96,12 +102,13 @@ export class GroundController {
       }
 
       // todo: validate Neurai address
-      console.log(body.token, "->", address);
+      console.log(body.token, chain, "->", address);
       try {
         await this.tokenToAddressRepository.save({
           address,
           token: body.token,
           os: body.os,
+          chain,
         });
       } catch (_) {}
     }
@@ -109,12 +116,13 @@ export class GroundController {
     // todo: refactor into single batch save
     for (const txid of body.txids) {
       // todo: validate txid
-      console.log(body.token, "->", txid);
+      console.log(body.token, chain, "->", txid);
       try {
         await this.tokenToTxidRepository.save({
           txid,
           token: body.token,
           os: body.os,
+          chain,
         });
       } catch (_) {}
     }
@@ -137,16 +145,22 @@ export class GroundController {
       return;
     }
 
+    if (body.chain !== "mainnet" && body.chain !== "testnet") {
+      response.status(400).send("chain must be 'mainnet' or 'testnet'");
+      return;
+    }
+    const chain: string = body.chain;
+
     for (const address of body.addresses) {
       try {
-        const addressRecord = await this.tokenToAddressRepository.findOneBy({ os: body.os, token: body.token, address });
+        const addressRecord = await this.tokenToAddressRepository.findOneBy({ os: body.os, token: body.token, address, chain });
         await this.tokenToAddressRepository.remove(addressRecord);
       } catch (_) {}
     }
 
     for (const txid of body.txids) {
       try {
-        const txidRecord = await this.tokenToTxidRepository.findOneBy({ os: body.os, token: body.token, txid });
+        const txidRecord = await this.tokenToTxidRepository.findOneBy({ os: body.os, token: body.token, txid, chain });
         await this.tokenToTxidRepository.remove(txidRecord);
       } catch (_) {}
     }
@@ -157,7 +171,8 @@ export class GroundController {
   async ping(request: Request, response: Response, next: NextFunction) {
     const keyValueRepository = this._connection.getRepository(KeyValue);
     const sendQueueRepository = this._connection.getRepository(SendQueue);
-    const keyVal = await keyValueRepository.findOneBy({ key: LAST_PROCESSED_BLOCK });
+    const keyValMainnet = await keyValueRepository.findOneBy({ key: `${LAST_PROCESSED_BLOCK}_mainnet` });
+    const keyValTestnet = await keyValueRepository.findOneBy({ key: `${LAST_PROCESSED_BLOCK}_testnet` });
     const send_queue_size = await sendQueueRepository.count();
 
     const ts = new Date(+new Date() - 1000 * 3600 * 24).toISOString();
@@ -168,7 +183,8 @@ export class GroundController {
       description: pck.description,
       version: pck.version,
       uptime: Math.floor(process.uptime()),
-      last_processed_block: +keyVal.value,
+      last_processed_block_mainnet: keyValMainnet ? +keyValMainnet.value : 0,
+      last_processed_block_testnet: keyValTestnet ? +keyValTestnet.value : 0,
       send_queue_size,
       sent_24h,
     };

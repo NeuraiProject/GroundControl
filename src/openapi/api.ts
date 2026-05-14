@@ -15,8 +15,9 @@ export type paths = {
           "application/json": {
             addresses?: string[];
             txids?: string[];
-            token?: string;
-            os?: string;
+            token: string;
+            os: string;
+            chain: components["schemas"]["NeuraiChain"];
           } & { [key: string]: unknown };
         };
       };
@@ -33,8 +34,9 @@ export type paths = {
           "application/json": {
             addresses?: string[];
             txids?: string[];
-            token?: string;
-            os?: string;
+            token: string;
+            os: string;
+            chain: components["schemas"]["NeuraiChain"];
           } & { [key: string]: unknown };
         };
       };
@@ -115,10 +117,16 @@ export type components = {
       description?: string;
       version?: string;
       uptime?: number;
-      last_processed_block?: number;
+      last_processed_block_mainnet?: number;
+      last_processed_block_testnet?: number;
       send_queue_size?: number;
       sent_24h?: number;
     } & { [key: string]: unknown };
+    /**
+     * @description Neurai chain identifier. One GroundControl instance can watch both mainnet and testnet in parallel; subscriptions are scoped by this field.
+     * @enum {string}
+     */
+    NeuraiChain: "mainnet" | "testnet";
     /** @enum {string} */
     NotificationLevel: "transactions" | "news" | "price" | "tips";
     TokenConfiguration: {

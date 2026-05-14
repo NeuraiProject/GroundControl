@@ -205,6 +205,7 @@ describe("GroundController", () => {
         body: {
           token: "test-token",
           os: "ios",
+          chain: "mainnet",
           addresses: ["nq1qexampleneuraiaddress0000000000000000000"],
           txids: ["txid123"],
         },
@@ -219,14 +220,28 @@ describe("GroundController", () => {
         address: "nq1qexampleneuraiaddress0000000000000000000",
         token: "test-token",
         os: "ios",
+        chain: "mainnet",
       });
       expect(mockRepository.save).toHaveBeenCalledWith({
         txid: "txid123",
         token: "test-token",
         os: "ios",
+        chain: "mainnet",
       });
       expect(mockResponse.status).toHaveBeenCalledWith(201);
       expect(mockResponse.send).toHaveBeenCalledWith("");
+    });
+
+    it("should reject missing chain", async () => {
+      mockRequest.body.chain = undefined;
+      await groundController.majorTomToGroundControl(mockRequest, mockResponse, mockNext);
+      expect(mockResponse.status).toHaveBeenCalledWith(400);
+    });
+
+    it("should reject invalid chain", async () => {
+      mockRequest.body.chain = "regtest";
+      await groundController.majorTomToGroundControl(mockRequest, mockResponse, mockNext);
+      expect(mockResponse.status).toHaveBeenCalledWith(400);
     });
 
     it("should handle missing token", async () => {
@@ -293,6 +308,7 @@ describe("GroundController", () => {
         body: {
           token: "test-token",
           os: "ios",
+          chain: "mainnet",
           addresses: ["nq1qexampleneuraiaddress0000000000000000000"],
           txids: ["txid123"],
         },

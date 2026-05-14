@@ -9,13 +9,17 @@ servers:
 paths:
   /majorTomToGroundControl:
     post:
-      summary: "Associate Neurai on-chain addresses / txids you wish to be notified about with a specific push token. Token serves as unique identifier of a device/user. Also, OS of the token"
+      summary: "Associate Neurai on-chain addresses / txids you wish to be notified about with a specific push token. Token serves as unique identifier of a device/user. Also, OS of the token and chain ('mainnet' or 'testnet')."
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              required:
+                - token
+                - os
+                - chain
               properties:
                 addresses:
                   type: array
@@ -29,19 +33,25 @@ paths:
                   type: string
                 os:
                   type: string
+                chain:
+                  $ref: "#/components/schemas/NeuraiChain"
       responses:
         "201":
           description: Created
 
   /unsubscribe:
     post:
-      summary: "Reverse of /majorTomToGroundControl. Removes the given addresses/txids from the device's subscription set."
+      summary: "Reverse of /majorTomToGroundControl. Removes the given addresses/txids from the device's subscription set on the given chain."
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              required:
+                - token
+                - os
+                - chain
               properties:
                 addresses:
                   type: array
@@ -55,6 +65,8 @@ paths:
                   type: string
                 os:
                   type: string
+                chain:
+                  $ref: "#/components/schemas/NeuraiChain"
       responses:
         "201":
           description: Created
@@ -143,12 +155,21 @@ components:
           type: "string"
         uptime:
           type: "number"
-        last_processed_block:
+        last_processed_block_mainnet:
+          type: "number"
+        last_processed_block_testnet:
           type: "number"
         send_queue_size:
           type: "number"
         sent_24h:
           type: "number"
+
+    NeuraiChain:
+      type: string
+      description: "Neurai chain identifier. One GroundControl instance can watch both mainnet and testnet in parallel; subscriptions are scoped by this field."
+      enum:
+        - mainnet
+        - testnet
 
     NotificationLevel:
       type: string

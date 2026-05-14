@@ -1,8 +1,8 @@
 import { Entity, PrimaryGeneratedColumn, Column, Index } from "typeorm";
 
 @Entity()
-@Index(["token", "address"], { unique: true })
-@Index(["address"], { unique: false })
+@Index(["token", "chain", "address"], { unique: true })
+@Index(["chain", "address"], { unique: false })
 export class TokenToAddress {
   @PrimaryGeneratedColumn()
   id: number;
@@ -15,6 +15,10 @@ export class TokenToAddress {
 
   @Column()
   address: string;
+
+  /** Neurai chain this subscription belongs to ('mainnet' | 'testnet'). */
+  @Column({ default: "mainnet" })
+  chain: string;
 
   @Column({ type: "timestamp", default: () => "CURRENT_TIMESTAMP" })
   created: Date;

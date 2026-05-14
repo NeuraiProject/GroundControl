@@ -12,6 +12,11 @@ if (!NEURAI_RPC) {
   console.error("NEURAI_RPC env variable is not set");
   process.exit();
 }
+const CHAIN = process.env.CHAIN;
+if (CHAIN !== "mainnet" && CHAIN !== "testnet") {
+  console.error("CHAIN env variable must be 'mainnet' or 'testnet'");
+  process.exit();
+}
 const client = buildNeuraiRpcClient(NEURAI_RPC);
 
 let processedTxids = {};
@@ -29,9 +34,9 @@ process
 let sendQueueRepository: Repository<SendQueue>;
 
 async function processMempool() {
-  process.env.VERBOSE && console.log("cached txids=", Object.keys(processedTxids).length);
+  process.env.VERBOSE && console.log(`[${CHAIN}] cached txids=`, Object.keys(processedTxids).length);
   const responseGetrawmempool = await client.request("getrawmempool", []);
-  process.env.VERBOSE && console.log(responseGetrawmempool.result.length, "txs in mempool");
+  process.env.VERBOSE && console.log(`[${CHAIN}]`, responseGetrawmempool.result.length, "txs in mempool");
 
   let addresses: string[] = [];
   let allPotentialPushPayloadsArray: components["schemas"]["PushNotificationOnchainAddressGotUnconfirmedTransaction"][] = [];
@@ -77,17 +82,12 @@ async function processMempool() {
         continue;
       }
 
-      // fetching found addresses from db:
-      const query = dataSource.getRepository(TokenToAddress).createQueryBuilder().where("address IN (:...address)", { address: addresses });
+      // fetching found addresses from db, chain-scoped:
+      const query = dataSource.getRepository(TokenToAddress).createQueryBuilder().where("address IN (:...address)", { address: addresses }).andWhere("chain = :chain", { chain: CHAIN });
       for (const t2a of await query.getMany()) {
-        // found all addresses that we are tracking on behalf of our users. now,
-        // iterating all addresses in a block to see if there is a match.
-        // we could only iterate tracked addresses, but that would imply deduplication which is not good (for example,
-        // in a single block user could get several incoming payments to different owned addresses)
-        // cycle in cycle is less than optimal, but we can live with that for now
         for (let payload of allPotentialPushPayloadsArray) {
           if (t2a.address === payload.address) {
-            process.env.VERBOSE && console.log("enqueueing", payload);
+            process.env.VERBOSE && console.log(`[${CHAIN}] enqueueing`, payload);
             payload.os = t2a.os === "android" ? "android" : "ios"; // hacky
             payload.token = t2a.token;
             payload.type = 3;
@@ -116,7 +116,7 @@ dataSource
   .then(async (connection) => {
     // start worker
     console.log("db connected");
-    console.log("running groundcontrol worker-processmempool");
+    console.log(`running groundcontrol worker-processmempool on chain ${CHAIN}`);
     console.log(require("fs").readFileSync("./bowie.txt").toString("ascii"));
 
     sendQueueRepository = dataSource.getRepository(SendQueue);
@@ -126,15 +126,15 @@ dataSource
       try {
         await processMempool();
       } catch (error) {
-        console.warn("Exception in processMempool():", error);
+        console.warn(`[${CHAIN}] Exception in processMempool():`, error);
       }
       const end = +new Date();
-      console.log("processing mempool took", (end - start) / 1000, "sec");
+      console.log(`[${CHAIN}] processing mempool took`, (end - start) / 1000, "sec");
       console.log("-----------------------");
       await new Promise((resolve) => setTimeout(resolve, 9000, false));
     }
   })
   .catch((error) => {
-    console.error("exception in mempool processor:", error, "comitting suicide");
+    console.error(`[${CHAIN}] exception in mempool processor:`, error, "comitting suicide");
     process.exit(1);
   });

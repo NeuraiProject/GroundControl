@@ -1,12 +1,14 @@
 version: "3.9"
 
-# Local development stack for groundcontrol-neurai.
-# Drop a `.env` next to this file (start from `.env.example`) before running.
+# Stack for groundcontrol-neurai. Watches BOTH mainnet and testnet in a single
+# instance: dedicated block/mempool worker per chain, but a shared web/API,
+# database, and sender. Drop a `.env` next to this file (start from
+# `.env.example`) before running.
 #
 #   docker compose up --build
 #
-# Then point the wallet's "Settings → Notifications → developer panel" GroundControl
-# URI at http://<host-ip>:3001 (or use `adb reverse tcp:3001 tcp:3001` for Android).
+# Then point the wallet's "Settings → Notifications → developer panel" URI at
+# https://groundcontrol.<your-domain>  (or http://<host-ip>:3001 for local dev).
 
 services:
   mariadb:
@@ -29,7 +31,6 @@ services:
       - mariadb
     environment:
       JAWSDB_MARIA_URL: mysql://groundcontrol:secret@mariadb:3306/groundcontrol
-      NEURAI_RPC: ${NEURAI_RPC}
       APNS_P8: ${APNS_P8}
       APNS_P8_KID: ${APNS_P8_KID}
       APPLE_TEAM_ID: ${APPLE_TEAM_ID}
@@ -41,27 +42,57 @@ services:
     ports:
       - "3001:3001"
 
-  worker-blockprocessor:
+  # ---- Chain watchers: one block + one mempool worker per chain ------------
+
+  worker-blockprocessor-mainnet:
     build: .
     restart: unless-stopped
     depends_on:
       - mariadb
     environment:
       JAWSDB_MARIA_URL: mysql://groundcontrol:secret@mariadb:3306/groundcontrol
-      NEURAI_RPC: ${NEURAI_RPC}
+      NEURAI_RPC: ${NEURAI_RPC_MAINNET}
+      CHAIN: mainnet
       VERBOSE: ${VERBOSE}
     command: npm run worker-blockprocessor
 
-  worker-processmempool:
+  worker-processmempool-mainnet:
     build: .
     restart: unless-stopped
     depends_on:
       - mariadb
     environment:
       JAWSDB_MARIA_URL: mysql://groundcontrol:secret@mariadb:3306/groundcontrol
-      NEURAI_RPC: ${NEURAI_RPC}
+      NEURAI_RPC: ${NEURAI_RPC_MAINNET}
+      CHAIN: mainnet
       VERBOSE: ${VERBOSE}
     command: npm run worker-processmempool
+
+  worker-blockprocessor-testnet:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - mariadb
+    environment:
+      JAWSDB_MARIA_URL: mysql://groundcontrol:secret@mariadb:3306/groundcontrol
+      NEURAI_RPC: ${NEURAI_RPC_TESTNET}
+      CHAIN: testnet
+      VERBOSE: ${VERBOSE}
+    command: npm run worker-blockprocessor
+
+  worker-processmempool-testnet:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - mariadb
+    environment:
+      JAWSDB_MARIA_URL: mysql://groundcontrol:secret@mariadb:3306/groundcontrol
+      NEURAI_RPC: ${NEURAI_RPC_TESTNET}
+      CHAIN: testnet
+      VERBOSE: ${VERBOSE}
+    command: npm run worker-processmempool
+
+  # ---- Single sender (chain-agnostic — pulls from the shared SendQueue) ----
 
   worker-sender:
     build: .

@@ -10,12 +10,14 @@ Built with TypeScript, Express, MariaDB and an OpenAPI spec (`openapi.yaml`).
 
 ## Architecture
 
-Four processes that share a MariaDB instance:
+A single instance watches **both mainnet and testnet** in parallel. Subscriptions are tagged by `chain` in the DB, so a mainnet address and a testnet address that happen to share the same string never cross. Processes:
 
-- `web` — HTTP API (`/majorTomToGroundControl`, `/unsubscribe`, `/setTokenConfiguration`, …).
-- `worker-blockprocessor` — polls the Neurai node for new blocks, scans tx outputs, enqueues pushes for subscribed addresses/txids.
-- `worker-processmempool` — same logic against unconfirmed transactions.
-- `worker-sender` — pulls from the queue and dispatches via FCM/APNs.
+- `web` — HTTP API (`/majorTomToGroundControl`, `/unsubscribe`, `/setTokenConfiguration`, …). The `chain` field is required on every subscribe/unsubscribe.
+- `worker-blockprocessor-mainnet` / `worker-blockprocessor-testnet` — one per chain. Polls the Neurai RPC for new blocks and enqueues pushes for chain-matching subscriptions.
+- `worker-processmempool-mainnet` / `worker-processmempool-testnet` — same for unconfirmed transactions.
+- `worker-sender` — chain-agnostic. Pulls from the shared `SendQueue` and dispatches via FCM/APNs.
+
+To run only one chain, comment out the corresponding pair of workers in `docker-compose.yml`.
 
 ## Installation
 
@@ -39,13 +41,15 @@ docker compose up --build
 Copy `.env.example` and fill in the real values.
 
 - `JAWSDB_MARIA_URL` — MariaDB connection URL, e.g. `mysql://user:pass@host:3306/groundcontrol`.
-- `NEURAI_RPC` — Neurai JSON-RPC URL. Either the public anonymous endpoint shipped with the wallet:
+- `NEURAI_RPC_MAINNET` and `NEURAI_RPC_TESTNET` — Neurai JSON-RPC URLs, one per chain. Either the public anonymous endpoints shipped with the wallet:
+
   - mainnet: `https://rpc-main.neurai.org/rpc`
   - testnet: `https://rpc-testnet.neurai.org/rpc`
 
-  …or a self-hosted node: `http://user:pass@127.0.0.1:9817`. One chain per GroundControl instance (run a second instance with a separate DB to watch the other chain).
+  …or your own self-hosted nodes (`http://user:pass@host:port`). The block/mempool workers read `NEURAI_RPC` per container; `docker-compose.yml` wires each to its chain.
 
   **Note on rate limits:** the workers hit the RPC continuously (every new block + every ~9 s for the mempool, plus one `getrawtransaction` per new mempool tx). For high-traffic deployments on mainnet, coordinate with whoever runs the public endpoint or self-host the node.
+
 - `APNS_P8` — hex-encoded contents of the APNs `.p8` key file from Apple Developer.
 - `APNS_P8_KID` — "Key ID" of that `.p8`.
 - `APPLE_TEAM_ID` — Team ID of the Apple developer account.
