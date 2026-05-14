@@ -6,8 +6,8 @@ import { KeyValue } from "./entity/KeyValue";
 import { TokenToTxid } from "./entity/TokenToTxid";
 import dataSource from "./data-source";
 import { components } from "./openapi/api";
+import { buildNeuraiRpcClient } from "./neurai-rpc-client";
 require("dotenv").config();
-const url = require("url");
 
 const NEURAI_RPC = process.env.NEURAI_RPC;
 if (!NEURAI_RPC) {
@@ -25,9 +25,7 @@ process
     process.exit(1);
   });
 
-let jayson = require("jayson/promise");
-let rpc = url.parse(NEURAI_RPC);
-let client = jayson.client.http(rpc);
+const client = buildNeuraiRpcClient(NEURAI_RPC);
 
 const LAST_PROCESSED_BLOCK = "LAST_PROCESSED_BLOCK";
 

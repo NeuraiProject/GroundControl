@@ -39,7 +39,13 @@ docker compose up --build
 Copy `.env.example` and fill in the real values.
 
 - `JAWSDB_MARIA_URL` — MariaDB connection URL, e.g. `mysql://user:pass@host:3306/groundcontrol`.
-- `NEURAI_RPC` — Neurai full-node RPC URL, e.g. `http://user:pass@127.0.0.1:9817`.
+- `NEURAI_RPC` — Neurai JSON-RPC URL. Either the public anonymous endpoint shipped with the wallet:
+  - mainnet: `https://rpc-main.neurai.org/rpc`
+  - testnet: `https://rpc-testnet.neurai.org/rpc`
+
+  …or a self-hosted node: `http://user:pass@127.0.0.1:9817`. One chain per GroundControl instance (run a second instance with a separate DB to watch the other chain).
+
+  **Note on rate limits:** the workers hit the RPC continuously (every new block + every ~9 s for the mempool, plus one `getrawtransaction` per new mempool tx). For high-traffic deployments on mainnet, coordinate with whoever runs the public endpoint or self-host the node.
 - `APNS_P8` — hex-encoded contents of the APNs `.p8` key file from Apple Developer.
 - `APNS_P8_KID` — "Key ID" of that `.p8`.
 - `APPLE_TEAM_ID` — Team ID of the Apple developer account.

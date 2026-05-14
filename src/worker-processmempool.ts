@@ -4,16 +4,15 @@ import { TokenToAddress } from "./entity/TokenToAddress";
 import { SendQueue } from "./entity/SendQueue";
 import dataSource from "./data-source";
 import { components } from "./openapi/api";
+import { buildNeuraiRpcClient } from "./neurai-rpc-client";
 require("dotenv").config();
-const url = require("url");
-let jayson = require("jayson/promise");
+
 const NEURAI_RPC = process.env.NEURAI_RPC;
 if (!NEURAI_RPC) {
   console.error("NEURAI_RPC env variable is not set");
   process.exit();
 }
-let rpc = url.parse(NEURAI_RPC);
-let client = jayson.client.http(rpc);
+const client = buildNeuraiRpcClient(NEURAI_RPC);
 
 let processedTxids = {};
 
