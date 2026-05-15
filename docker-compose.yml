@@ -1,5 +1,3 @@
-version: "3.9"
-
 # Stack for groundcontrol-neurai. Watches BOTH mainnet and testnet in a single
 # instance: dedicated block/mempool worker per chain, but a shared web/API,
 # database, and sender. Drop a `.env` next to this file (start from
@@ -21,8 +19,6 @@ services:
       MARIADB_PASSWORD: secret
     volumes:
       - groundcontrol-mariadb-data:/var/lib/mysql
-    ports:
-      - "3306:3306"
 
   web:
     build: .

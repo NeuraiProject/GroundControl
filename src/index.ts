@@ -46,6 +46,7 @@ const purgeOldTxidSubscriptions = () => {
 };
 
 const purgeIgnoredAddressesSubscriptions = () => {
+  if (ADDRESS_IGNORE_LIST.length === 0) return;
   console.log("Purging addresses subscriptions...");
   connection
     .createQueryBuilder()
