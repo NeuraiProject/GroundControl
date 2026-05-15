@@ -44,6 +44,14 @@ export class GroundControlToMajorTom {
   }
 
   static getApnsJwtToken(): string {
+    // Android-only deployments don't ship APNS credentials. Signing with an
+    // empty key throws "secretOrPrivateKey must have a value" and crashes the
+    // sender before any FCM push goes out — short-circuit instead so the
+    // sender keeps draining the queue for FCM targets.
+    if (!process.env.APNS_P8 || !process.env.APPLE_TEAM_ID || !process.env.APNS_P8_KID) {
+      return "";
+    }
+
     if (+new Date() - GroundControlToMajorTom._jwtTokenMicroTimestamp < 1800 * 1000) {
       return GroundControlToMajorTom._jwtToken;
     }
