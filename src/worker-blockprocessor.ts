@@ -124,7 +124,6 @@ dataSource
     // start worker
     console.log("db connected");
     console.log(`running groundcontrol worker-blockprocessor on chain ${CHAIN}`);
-    console.log(require("fs").readFileSync("./bowie.txt").toString("ascii"));
 
     const KeyValueRepository = dataSource.getRepository(KeyValue);
     const sendQueueRepository = dataSource.getRepository(SendQueue);

@@ -117,7 +117,6 @@ dataSource
     // start worker
     console.log("db connected");
     console.log(`running groundcontrol worker-processmempool on chain ${CHAIN}`);
-    console.log(require("fs").readFileSync("./bowie.txt").toString("ascii"));
 
     sendQueueRepository = dataSource.getRepository(SendQueue);
 

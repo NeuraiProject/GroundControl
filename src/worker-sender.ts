@@ -27,7 +27,6 @@ dataSource
     // start worker
     console.log("db connected");
     console.log("running groundcontrol worker-sender");
-    console.log(require("fs").readFileSync("./bowie.txt").toString("ascii"));
 
     const sendQueueRepository = dataSource.getRepository(SendQueue);
     const tokenConfigurationRepository = dataSource.getRepository(TokenConfiguration);
