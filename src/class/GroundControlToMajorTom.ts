@@ -56,25 +56,32 @@ export class GroundControlToMajorTom {
       return GroundControlToMajorTom._jwtToken;
     }
 
-    const key = Buffer.from(process.env.APNS_P8, "hex").toString("utf8");
-    const jwtToken = jwt.sign(
-      {
-        iss: process.env.APPLE_TEAM_ID, // "team ID" of your developer account
-        iat: Math.round(+new Date() / 1000),
-      },
-      key,
-      {
-        header: {
-          alg: "ES256",
-          kid: process.env.APNS_P8_KID, // issuer key which is "key ID" of your p8 file
+    try {
+      const key = Buffer.from(process.env.APNS_P8, "hex").toString("utf8");
+      const jwtToken = jwt.sign(
+        {
+          iss: process.env.APPLE_TEAM_ID, // "team ID" of your developer account
+          iat: Math.round(+new Date() / 1000),
         },
-      }
-    );
+        key,
+        {
+          header: {
+            alg: "ES256",
+            kid: process.env.APNS_P8_KID, // issuer key which is "key ID" of your p8 file
+          },
+        }
+      );
 
-    GroundControlToMajorTom._jwtTokenMicroTimestamp = +new Date();
-    GroundControlToMajorTom._jwtToken = jwtToken;
-
-    return jwtToken;
+      GroundControlToMajorTom._jwtTokenMicroTimestamp = +new Date();
+      GroundControlToMajorTom._jwtToken = jwtToken;
+      return jwtToken;
+    } catch (err) {
+      // Placeholder/invalid APNS_P8 (or related env var) — env guard above
+      // covers the empty case, but signing can still fail if values are set
+      // to non-functional placeholders. Swallow so the sender keeps going.
+      console.warn("getApnsJwtToken: failed to sign APNS JWT, returning empty string:", err);
+      return "";
+    }
   }
 
   static async pushOnchainAddressGotUnconfirmedTransaction(
@@ -179,7 +186,7 @@ export class GroundControlToMajorTom {
           tag: pushNotification.txid,
         },
         notification: {
-          title: "+" + pushNotification.sat + " sats",
+          title: "+" + (pushNotification.sat / 1e8).toFixed(8).replace(/\.?0+$/, "") + " XNA",
           body: "Received on " + StringUtils.shortenAddress(pushNotification.address),
         },
       },
@@ -189,7 +196,7 @@ export class GroundControlToMajorTom {
       aps: {
         badge: pushNotification.badge,
         alert: {
-          title: "+" + pushNotification.sat + " sats",
+          title: "+" + (pushNotification.sat / 1e8).toFixed(8).replace(/\.?0+$/, "") + " XNA",
           body: "Received on " + StringUtils.shortenAddress(pushNotification.address),
         },
         sound: "default",
