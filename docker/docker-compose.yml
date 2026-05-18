@@ -1,0 +1,51 @@
+name: groundcontrol-neurai
+
+services:
+  neurai-mainnet:
+    build: ./node-mainnet
+    container_name: groundcontrol-neurai-mainnet
+    restart: unless-stopped
+    volumes:
+      - mainnet_data:/data
+    networks:
+      - groundcontrol-neurai-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "neurai-cli", "-datadir=/data", "getblockchaininfo"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  neurai-testnet:
+    build: ./node-testnet
+    container_name: groundcontrol-neurai-testnet
+    restart: unless-stopped
+    volumes:
+      - testnet_data:/data
+    networks:
+      - groundcontrol-neurai-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "neurai-cli", "-datadir=/data", "getblockchaininfo"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  mainnet_data:
+  testnet_data:
+
+networks:
+  groundcontrol-neurai-net:
+    name: groundcontrol-neurai-net
+    driver: bridge
