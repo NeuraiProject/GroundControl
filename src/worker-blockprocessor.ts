@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import { Subscriber } from "zeromq";
 import { Repository } from "typeorm";
 import { TokenToAddress } from "./entity/TokenToAddress";
 import { SendQueue } from "./entity/SendQueue";
@@ -12,6 +13,12 @@ require("dotenv").config();
 const NEURAI_RPC = process.env.NEURAI_RPC;
 if (!NEURAI_RPC) {
   console.error("NEURAI_RPC env variable is not set");
+  process.exit();
+}
+
+const NEURAI_ZMQ = process.env.NEURAI_ZMQ;
+if (!NEURAI_ZMQ) {
+  console.error("NEURAI_ZMQ env variable is not set");
   process.exit();
 }
 
@@ -33,12 +40,14 @@ process
 
 const client = buildNeuraiRpcClient(NEURAI_RPC);
 
-// Per-chain key so mainnet and testnet workers don't trample each other's
-// progress in the shared `KeyValue` table.
 const LAST_PROCESSED_BLOCK_KEY = `LAST_PROCESSED_BLOCK_${CHAIN}`;
 
-async function processBlock(blockNum, sendQueueRepository: Repository<SendQueue>) {
-  console.log(`[${CHAIN}] processing new block`, +blockNum);
+// ZMQ has no heartbeat; if a silent failure drops notifications, this
+// catches us up periodically.
+const SAFETY_POLL_MS = 5 * 60 * 1000;
+
+async function processBlockNum(blockNum: number, sendQueueRepository: Repository<SendQueue>) {
+  console.log(`[${CHAIN}] processing block`, blockNum);
   const responseGetblockhash = await client.request("getblockhash", [blockNum]);
   const responseGetblock = await client.request("getblock", [responseGetblockhash.result, 2]);
   const addresses: string[] = [];
@@ -69,97 +78,97 @@ async function processBlock(blockNum, sendQueueRepository: Repository<SendQueue>
 
   console.log(`[${CHAIN}]`, addresses.length, "addresses paid in block");
 
-  // Match only against subscriptions for this chain so a mainnet address that
-  // happens to collide with a testnet address (or vice versa) never crosses
-  // chains.
-  const query = dataSource.getRepository(TokenToAddress).createQueryBuilder().where("address IN (:...address)", { address: addresses }).andWhere("chain = :chain", { chain: CHAIN });
+  if (addresses.length > 0) {
+    const query = dataSource.getRepository(TokenToAddress).createQueryBuilder().where("address IN (:...address)", { address: addresses }).andWhere("chain = :chain", { chain: CHAIN });
 
-  let entities2save = [];
-  for (const t2a of await query.getMany()) {
-    for (let payload of allPotentialPushPayloadsArray) {
-      if (t2a.address === payload.address) {
-        process.env.VERBOSE && console.log(`[${CHAIN}] enqueueing`, payload);
-        payload.os = t2a.os === "android" ? "android" : "ios"; // hacky
-        payload.token = t2a.token;
-        payload.type = 2;
-        payload.badge = 1;
-        entities2save.push({
-          data: JSON.stringify(payload),
-        });
+    let entities2save = [];
+    for (const t2a of await query.getMany()) {
+      for (let payload of allPotentialPushPayloadsArray) {
+        if (t2a.address === payload.address) {
+          process.env.VERBOSE && console.log(`[${CHAIN}] enqueueing`, payload);
+          payload.os = t2a.os === "android" ? "android" : "ios";
+          payload.token = t2a.token;
+          payload.type = 2;
+          payload.badge = 1;
+          entities2save.push({ data: JSON.stringify(payload) });
+        }
       }
+    }
+    if (entities2save.length > 0) {
+      await sendQueueRepository.createQueryBuilder().insert().into(SendQueue).values(entities2save).execute();
     }
   }
 
-  if (entities2save.length > 0) {
-    await sendQueueRepository.createQueryBuilder().insert().into(SendQueue).values(entities2save).execute();
+  if (txids.length > 0) {
+    const query2 = dataSource.getRepository(TokenToTxid).createQueryBuilder().where("txid IN (:...txids)", { txids }).andWhere("chain = :chain", { chain: CHAIN });
+    const entities2save = [];
+    for (const t2txid of await query2.getMany()) {
+      const payload: components["schemas"]["PushNotificationTxidGotConfirmed"] = {
+        txid: t2txid.txid,
+        type: 4,
+        level: "transactions",
+        token: t2txid.token,
+        os: t2txid.os === "ios" ? "ios" : "android",
+        badge: 1,
+      };
+      process.env.VERBOSE && console.log(`[${CHAIN}] enqueueing`, payload);
+      entities2save.push({ data: JSON.stringify(payload) });
+    }
+    if (entities2save.length > 0) {
+      await sendQueueRepository.createQueryBuilder().insert().into(SendQueue).values(entities2save).execute();
+    }
   }
+}
 
-  // Subscriptions to specific txids, also chain-scoped:
-  const query2 = dataSource.getRepository(TokenToTxid).createQueryBuilder().where("txid IN (:...txids)", { txids }).andWhere("chain = :chain", { chain: CHAIN });
-  entities2save = [];
-  for (const t2txid of await query2.getMany()) {
-    const payload: components["schemas"]["PushNotificationTxidGotConfirmed"] = {
-      txid: t2txid.txid,
-      type: 4,
-      level: "transactions",
-      token: t2txid.token,
-      os: t2txid.os === "ios" ? "ios" : "android",
-      badge: 1,
-    };
-
-    process.env.VERBOSE && console.log(`[${CHAIN}] enqueueing`, payload);
-    entities2save.push({
-      data: JSON.stringify(payload),
-    });
+async function catchUpToTip(KeyValueRepository: Repository<KeyValue>, sendQueueRepository: Repository<SendQueue>) {
+  let keyVal = await KeyValueRepository.findOneBy({ key: LAST_PROCESSED_BLOCK_KEY });
+  const tip = +(await client.request("getblockcount", [])).result;
+  if (!keyVal) {
+    await KeyValueRepository.save({ key: LAST_PROCESSED_BLOCK_KEY, value: String(tip) });
+    console.log(`[${CHAIN}] initialised at tip ${tip}`);
+    return;
   }
-
-  if (entities2save.length > 0) {
-    await sendQueueRepository.createQueryBuilder().insert().into(SendQueue).values(entities2save).execute();
+  while (+keyVal.value < tip) {
+    const nextBlock = +keyVal.value + 1;
+    try {
+      await processBlockNum(nextBlock, sendQueueRepository);
+    } catch (error) {
+      console.warn(`[${CHAIN}] exception processing block ${nextBlock}:`, error);
+      if ((error as Error).message?.includes("socket hang up")) return;
+    }
+    keyVal.value = String(nextBlock);
+    await KeyValueRepository.save(keyVal);
   }
 }
 
 dataSource
   .initialize()
-  .then(async (connection) => {
-    // start worker
+  .then(async () => {
     console.log("db connected");
-    console.log(`running groundcontrol worker-blockprocessor on chain ${CHAIN}`);
+    console.log(`running groundcontrol worker-blockprocessor on chain ${CHAIN} via ZMQ ${NEURAI_ZMQ}`);
 
     const KeyValueRepository = dataSource.getRepository(KeyValue);
     const sendQueueRepository = dataSource.getRepository(SendQueue);
 
-    while (1) {
-      const keyVal = await KeyValueRepository.findOneBy({ key: LAST_PROCESSED_BLOCK_KEY });
-      if (!keyVal) {
-        // if no info saved in database we assume we are all caught up and wait for the next block
-        const responseGetblockcount = await client.request("getblockcount", []);
-        await KeyValueRepository.save({ key: LAST_PROCESSED_BLOCK_KEY, value: responseGetblockcount.result });
-        continue; // skipping worker iteration
-      }
+    // Catch up to current tip before listening to ZMQ.
+    await catchUpToTip(KeyValueRepository, sendQueueRepository);
 
-      const responseGetblockcount = await client.request("getblockcount", []);
+    // Safety net in case ZMQ silently stops delivering.
+    setInterval(() => {
+      catchUpToTip(KeyValueRepository, sendQueueRepository).catch((e) => console.warn(`[${CHAIN}] safety poll error:`, e));
+    }, SAFETY_POLL_MS);
 
-      if (+responseGetblockcount.result <= +keyVal.value) {
-        await new Promise((resolve) => setTimeout(resolve, 10_000, false));
-        continue;
-      }
+    const sock = new Subscriber();
+    sock.connect(NEURAI_ZMQ);
+    sock.subscribe("hashblock");
 
-      let nextBlockToProcess: number = +keyVal.value + 1;
-      const start = +new Date();
+    for await (const [topicBuf, bodyBuf] of sock) {
+      process.env.VERBOSE && console.log(`[${CHAIN}] zmq`, topicBuf.toString(), bodyBuf.toString("hex"));
       try {
-        await processBlock(nextBlockToProcess, sendQueueRepository);
-      } catch (error) {
-        console.warn(`[${CHAIN}] exception when processing block:`, error, "continuing as usual");
-        if (error.message.includes("socket hang up")) {
-          // issue fetching block from the Neurai node
-          console.warn(`[${CHAIN}] retrying block number`, nextBlockToProcess);
-          continue; // skip overwriting `LAST_PROCESSED_BLOCK_${CHAIN}` in `KeyValue` table
-        }
+        await catchUpToTip(KeyValueRepository, sendQueueRepository);
+      } catch (e) {
+        console.warn(`[${CHAIN}] hashblock handler error:`, e);
       }
-      const end = +new Date();
-      console.log(`[${CHAIN}] took`, (end - start) / 1000, "sec");
-      keyVal.value = String(nextBlockToProcess);
-      await KeyValueRepository.save(keyVal);
     }
   })
   .catch((error) => {

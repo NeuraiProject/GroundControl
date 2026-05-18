@@ -85,6 +85,7 @@ services:
     environment:
       JAWSDB_MARIA_URL: mysql://groundcontrol:secret@mariadb:3306/groundcontrol
       NEURAI_RPC: http://neurai:changeme@neurai-mainnet:19101
+      NEURAI_ZMQ: tcp://neurai-mainnet:28332
       CHAIN: mainnet
     command: npm run worker-blockprocessor
     networks:
@@ -101,6 +102,7 @@ services:
     environment:
       JAWSDB_MARIA_URL: mysql://groundcontrol:secret@mariadb:3306/groundcontrol
       NEURAI_RPC: http://neurai:changeme@neurai-mainnet:19101
+      NEURAI_ZMQ: tcp://neurai-mainnet:28332
       CHAIN: mainnet
     command: npm run worker-processmempool
     networks:
@@ -117,6 +119,7 @@ services:
     environment:
       JAWSDB_MARIA_URL: mysql://groundcontrol:secret@mariadb:3306/groundcontrol
       NEURAI_RPC: http://neurai:changeme@neurai-testnet:19101
+      NEURAI_ZMQ: tcp://neurai-testnet:28332
       CHAIN: testnet
     command: npm run worker-blockprocessor
     networks:
@@ -133,6 +136,7 @@ services:
     environment:
       JAWSDB_MARIA_URL: mysql://groundcontrol:secret@mariadb:3306/groundcontrol
       NEURAI_RPC: http://neurai:changeme@neurai-testnet:19101
+      NEURAI_ZMQ: tcp://neurai-testnet:28332
       CHAIN: testnet
     command: npm run worker-processmempool
     networks:

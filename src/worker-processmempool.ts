@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import { Subscriber } from "zeromq";
 import { Repository } from "typeorm";
 import { TokenToAddress } from "./entity/TokenToAddress";
 import { SendQueue } from "./entity/SendQueue";
@@ -12,14 +13,30 @@ if (!NEURAI_RPC) {
   console.error("NEURAI_RPC env variable is not set");
   process.exit();
 }
+
+const NEURAI_ZMQ = process.env.NEURAI_ZMQ;
+if (!NEURAI_ZMQ) {
+  console.error("NEURAI_ZMQ env variable is not set");
+  process.exit();
+}
+
 const CHAIN = process.env.CHAIN;
 if (CHAIN !== "mainnet" && CHAIN !== "testnet") {
   console.error("CHAIN env variable must be 'mainnet' or 'testnet'");
   process.exit();
 }
+
 const client = buildNeuraiRpcClient(NEURAI_RPC);
 
-let processedTxids = {};
+// Dedup cache: a tx hits us via `hashtx` (unconfirmed) and then again via
+// the block worker once confirmed; only the unconfirmed notification path
+// is the mempool worker's job, so we squelch repeats here.
+const processedTxids: Record<string, number> = {};
+const TXID_CACHE_TTL_MS = 30 * 60 * 1000;
+
+// ZMQ has no heartbeat; periodically sweep the mempool in case some
+// notifications dropped silently.
+const SAFETY_POLL_MS = 5 * 60 * 1000;
 
 process
   .on("unhandledRejection", (reason, p) => {
@@ -33,104 +50,102 @@ process
 
 let sendQueueRepository: Repository<SendQueue>;
 
-async function processMempool() {
-  process.env.VERBOSE && console.log(`[${CHAIN}] cached txids=`, Object.keys(processedTxids).length);
-  const responseGetrawmempool = await client.request("getrawmempool", []);
-  process.env.VERBOSE && console.log(`[${CHAIN}]`, responseGetrawmempool.result.length, "txs in mempool");
+async function processTx(txid: string) {
+  if (processedTxids[txid]) return;
+  processedTxids[txid] = Date.now();
 
-  let addresses: string[] = [];
-  let allPotentialPushPayloadsArray: components["schemas"]["PushNotificationOnchainAddressGotUnconfirmedTransaction"][] = [];
+  let txData: any;
+  try {
+    const response = await client.request("getrawtransaction", [txid, true]);
+    txData = response.result;
+  } catch (e: any) {
+    process.env.VERBOSE && console.warn(`[${CHAIN}] getrawtransaction ${txid} failed:`, e?.message);
+    return;
+  }
+  if (!txData || !txData.vout) return;
 
-  let rpcBatch = [];
-  const batchSize = 100;
-  let countTxidsProcessed = 0;
-  for (const txid of responseGetrawmempool.result) {
-    countTxidsProcessed++;
-    if (!txid) continue;
-    if (!processedTxids[txid]) rpcBatch.push(client.request("getrawtransaction", [txid, true], undefined, false));
-    if (rpcBatch.length >= batchSize || countTxidsProcessed === responseGetrawmempool.result.length) {
-      const startBatch = +new Date();
-      // got enough txids - batch fetch them from the Neurai RPC
-      const responses = await client.request(rpcBatch);
-      for (const response of responses) {
-        if (response.result && response.result.vout) {
-          for (const output of response.result.vout) {
-            if (output.scriptPubKey && (output.scriptPubKey.addresses || output.scriptPubKey.address)) {
-              for (const address of output.scriptPubKey?.addresses ?? (output.scriptPubKey?.address ? [output.scriptPubKey?.address] : [])) {
-                addresses.push(address);
-                processedTxids[response.result.txid] = true;
-                const payload: components["schemas"]["PushNotificationOnchainAddressGotUnconfirmedTransaction"] = {
-                  address,
-                  txid: response.result.txid,
-                  sat: Math.floor(output.value * 100000000),
-                  type: 3,
-                  level: "transactions",
-                  token: "",
-                  os: "ios",
-                };
-                allPotentialPushPayloadsArray.push(payload);
-              }
-            }
-          }
-        }
+  const addresses: string[] = [];
+  const allPotentialPushPayloadsArray: components["schemas"]["PushNotificationOnchainAddressGotUnconfirmedTransaction"][] = [];
+  for (const output of txData.vout) {
+    if (output.scriptPubKey && (output.scriptPubKey.addresses || output.scriptPubKey.address)) {
+      for (const address of output.scriptPubKey?.addresses ?? (output.scriptPubKey?.address ? [output.scriptPubKey?.address] : [])) {
+        addresses.push(address);
+        allPotentialPushPayloadsArray.push({
+          address,
+          txid: txData.txid,
+          sat: Math.floor(output.value * 100000000),
+          type: 3,
+          level: "transactions",
+          token: "",
+          os: "ios",
+        });
       }
+    }
+  }
+  if (addresses.length === 0) return;
 
-      if (addresses.length === 0) {
-        allPotentialPushPayloadsArray = [];
-        addresses = [];
-        rpcBatch = [];
-        continue;
+  const query = dataSource.getRepository(TokenToAddress).createQueryBuilder().where("address IN (:...address)", { address: addresses }).andWhere("chain = :chain", { chain: CHAIN });
+  for (const t2a of await query.getMany()) {
+    for (let payload of allPotentialPushPayloadsArray) {
+      if (t2a.address === payload.address) {
+        process.env.VERBOSE && console.log(`[${CHAIN}] enqueueing`, payload);
+        payload.os = t2a.os === "android" ? "android" : "ios";
+        payload.token = t2a.token;
+        payload.type = 3;
+        payload.level = "transactions";
+        payload.badge = 1;
+        await sendQueueRepository.save({ data: JSON.stringify(payload) });
       }
-
-      // fetching found addresses from db, chain-scoped:
-      const query = dataSource.getRepository(TokenToAddress).createQueryBuilder().where("address IN (:...address)", { address: addresses }).andWhere("chain = :chain", { chain: CHAIN });
-      for (const t2a of await query.getMany()) {
-        for (let payload of allPotentialPushPayloadsArray) {
-          if (t2a.address === payload.address) {
-            process.env.VERBOSE && console.log(`[${CHAIN}] enqueueing`, payload);
-            payload.os = t2a.os === "android" ? "android" : "ios"; // hacky
-            payload.token = t2a.token;
-            payload.type = 3;
-            payload.level = "transactions";
-            payload.badge = 1;
-            await sendQueueRepository.save({
-              data: JSON.stringify(payload),
-            });
-          }
-        }
-      }
-
-      allPotentialPushPayloadsArray = [];
-      addresses = [];
-      rpcBatch = [];
-
-      const endBatch = +new Date();
-      // process.stdout.write('.');
-      process.env.VERBOSE && console.log("batch took", (endBatch - startBatch) / 1000, "sec");
     }
   }
 }
 
+function gcCache() {
+  const cutoff = Date.now() - TXID_CACHE_TTL_MS;
+  for (const txid of Object.keys(processedTxids)) {
+    if (processedTxids[txid] < cutoff) delete processedTxids[txid];
+  }
+}
+
+async function safetySweep() {
+  try {
+    const response = await client.request("getrawmempool", []);
+    for (const txid of response.result) {
+      if (!processedTxids[txid]) await processTx(txid);
+    }
+  } catch (e: any) {
+    console.warn(`[${CHAIN}] safety sweep error:`, e?.message);
+  }
+  gcCache();
+}
+
 dataSource
   .initialize()
-  .then(async (connection) => {
-    // start worker
+  .then(async () => {
     console.log("db connected");
-    console.log(`running groundcontrol worker-processmempool on chain ${CHAIN}`);
+    console.log(`running groundcontrol worker-processmempool on chain ${CHAIN} via ZMQ ${NEURAI_ZMQ}`);
 
     sendQueueRepository = dataSource.getRepository(SendQueue);
 
-    while (1) {
-      const start = +new Date();
+    // Initial sweep to backfill anything already in the mempool when we
+    // start, then a periodic safety net.
+    await safetySweep();
+    setInterval(() => {
+      safetySweep();
+    }, SAFETY_POLL_MS);
+
+    const sock = new Subscriber();
+    sock.connect(NEURAI_ZMQ);
+    sock.subscribe("hashtx");
+
+    for await (const [topicBuf, bodyBuf] of sock) {
+      const txid = bodyBuf.toString("hex");
+      process.env.VERBOSE && console.log(`[${CHAIN}] zmq`, topicBuf.toString(), txid);
       try {
-        await processMempool();
-      } catch (error) {
-        console.warn(`[${CHAIN}] Exception in processMempool():`, error);
+        await processTx(txid);
+      } catch (e) {
+        console.warn(`[${CHAIN}] processTx error:`, e);
       }
-      const end = +new Date();
-      console.log(`[${CHAIN}] processing mempool took`, (end - start) / 1000, "sec");
-      console.log("-----------------------");
-      await new Promise((resolve) => setTimeout(resolve, 9000, false));
     }
   })
   .catch((error) => {

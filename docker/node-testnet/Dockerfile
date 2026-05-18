@@ -17,22 +17,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     gnupg \
     libffi-dev \
-    libfontconfig1 \
-    libfreetype6 \
     libssl-dev \
     libtool \
-    libxcb-cursor0 \
-    libxcb-icccm4 \
-    libxcb-image0 \
-    libxcb-keysyms1 \
-    libxcb-randr0 \
-    libxcb-render-util0 \
-    libxcb-shape0 \
-    libxcb-sync1 \
-    libxcb-xfixes0 \
-    libxcb-xkb1 \
-    libxkbcommon0 \
-    libxkbcommon-x11-0 \
     meson \
     ninja-build \
     pkg-config \
@@ -48,7 +34,10 @@ RUN git clone --branch DePIN-Test --single-branch \
 
 WORKDIR /root/Neurai/depends
 
-RUN make HOST=x86_64-pc-linux-gnu -j$(nproc)
+# NO_QT=1 — skip building Qt and its transitive deps in depends/. Saves
+# ~30-50 min off the build. ZMQ is still built by depends/ as usual and
+# linked statically into neuraid.
+RUN make HOST=x86_64-pc-linux-gnu NO_QT=1 -j$(nproc)
 
 WORKDIR /root/Neurai
 
