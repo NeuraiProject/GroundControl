@@ -3,11 +3,17 @@ name: groundcontrol-neurai
 services:
   # ─── Neurai full nodes (internal-only) ───────────────────────────────────
   neurai-mainnet:
-    build: ./node-mainnet
+    # Reuse the prebuilt release image from Docker Hub instead of building from
+    # source. Its /node.sh entrypoint runs `neuraid -datadir=/data/node`; we
+    # bind-mount our own neurai.conf there (RPC 19101 + ZMQ 28332, matching the
+    # workers below) so /node.sh keeps the existing config instead of generating
+    # its default one. https://hub.docker.com/r/neuraiproject/neurai-node/tags
+    image: neuraiproject/neurai-node:v1.0.5
     container_name: groundcontrol-neurai-mainnet
     restart: unless-stopped
     volumes:
       - mainnet_data:/data
+      - ./node-mainnet/neurai.conf:/data/node/neurai.conf:ro
     networks:
       - groundcontrol-neurai-net
     logging:
@@ -16,7 +22,7 @@ services:
         max-size: "10m"
         max-file: "5"
     healthcheck:
-      test: ["CMD", "neurai-cli", "-datadir=/data", "getblockchaininfo"]
+      test: ["CMD", "neurai-cli", "-datadir=/data/node", "getblockchaininfo"]
       interval: 60s
       timeout: 10s
       retries: 3
