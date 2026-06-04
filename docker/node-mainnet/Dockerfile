@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /root
 
-RUN git clone --branch DePIN-Test --single-branch \
+RUN git clone --branch main --single-branch \
     https://github.com/NeuraiProject/Neurai.git
 
 WORKDIR /root/Neurai/depends
