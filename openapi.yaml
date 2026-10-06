@@ -197,6 +197,19 @@ components:
         app_version:
           type: "string"
 
+    AssetAmount:
+      type: object
+      required:
+        - name
+        - amount
+      properties:
+        name:
+          type: "string"
+          description: "asset name, e.g. `MYASSET` or its owner token `MYASSET!`"
+        amount:
+          type: "integer"
+          description: "amount in the asset's smallest unit (1 unit = 100,000,000)"
+
     PushNotificationBase:
       description: payload for push notification delivered to phone
       type: object
@@ -248,13 +261,18 @@ components:
               enum: ["transactions"]
             sat:
               type: "integer"
-              description: "amount in the smallest XNA unit (1 XNA = 100,000,000 sat)"
+              description: "XNA the transaction sent to this device's addresses, summed over all its outputs, in the smallest XNA unit (1 XNA = 100,000,000 sat). One push covers the whole transaction."
             address:
               type: "string"
-              description: "user's Neurai on-chain address that has an incoming transaction"
+              description: "user's Neurai on-chain address that has an incoming transaction (the first one, if the transaction paid several of the device's addresses)"
             txid:
               type: "string"
               description: "txid of the transaction where this address is one of the outputs"
+            assets:
+              type: "array"
+              description: "Neurai assets (issue, reissue or transfer outputs) the transaction sent to this device's addresses, summed per asset; absent if none. Over FCM it arrives JSON-encoded, since FCM data values are strings."
+              items:
+                $ref: "#/components/schemas/AssetAmount"
 
     PushNotificationOnchainAddressGotUnconfirmedTransaction:
       allOf: # Combines PushNotificationBase and the inline model
@@ -273,13 +291,18 @@ components:
               enum: ["transactions"]
             sat:
               type: "integer"
-              description: "amount in the smallest XNA unit (1 XNA = 100,000,000 sat)"
+              description: "XNA the transaction sent to this device's addresses, summed over all its outputs, in the smallest XNA unit (1 XNA = 100,000,000 sat). One push covers the whole transaction."
             address:
               type: "string"
-              description: "user's Neurai on-chain address that has an incoming transaction"
+              description: "user's Neurai on-chain address that has an incoming transaction (the first one, if the transaction paid several of the device's addresses)"
             txid:
               type: "string"
               description: "txid of the transaction where this address is one of the outputs"
+            assets:
+              type: "array"
+              description: "Neurai assets (issue, reissue or transfer outputs) the transaction sent to this device's addresses, summed per asset; absent if none. Over FCM it arrives JSON-encoded, since FCM data values are strings."
+              items:
+                $ref: "#/components/schemas/AssetAmount"
 
     PushNotificationTxidGotConfirmed:
       allOf: # Combines PushNotificationBase and the inline model

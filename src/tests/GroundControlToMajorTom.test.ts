@@ -360,13 +360,31 @@ describe("GroundControlToMajorTom", () => {
               tag: "abc123def456789",
             }),
             notification: expect.objectContaining({
-              title: "+100000 sats",
+              title: "+0.001 XNA",
               body: expect.stringContaining("bc1qx....0wlh"),
             }),
           }),
         }),
         mockPushNotification
       );
+    });
+
+    const titleFor = async (pushNotification) => {
+      const mockApnsPush = vi.spyOn(GroundControlToMajorTom as any, "_pushToApns").mockResolvedValue(undefined);
+      await GroundControlToMajorTom.pushOnchainAddressWasPaid(mockDataSource, "server-key", "apns-p8", { ...pushNotification, os: "ios" });
+      return (mockApnsPush.mock.calls[0][3] as any).aps.alert.title;
+    };
+
+    it("should show only the asset amount when no XNA arrived", async () => {
+      expect(await titleFor({ ...mockPushNotification, sat: 0, assets: [{ name: "MYASSET", amount: 2550000000 }] })).toBe("+25.5 MYASSET");
+    });
+
+    it("should list XNA and every asset of the transaction in a single title", async () => {
+      const assets = [
+        { name: "&CHAT!", amount: 100000000 },
+        { name: "&CHAT", amount: 99999900000000 },
+      ];
+      expect(await titleFor({ ...mockPushNotification, sat: 898996868500, assets })).toBe("+8989.968685 XNA, +1 &CHAT!, +999999 &CHAT");
     });
   });
 
@@ -548,6 +566,16 @@ describe("GroundControlToMajorTom", () => {
           success: true,
         })
       );
+    });
+
+    it("should JSON-encode nested notification properties in FCM data", async () => {
+      vi.mocked(global.fetch).mockResolvedValue({ text: vi.fn().mockResolvedValue("{}") } as any);
+      const fcmPayload = { message: { token: "", data: {}, notification: { title: "Test", body: "Test message" } } };
+      const pushNotification = { type: 2, token: "test-token", os: "android", badge: 1, level: "transactions", sat: 0, assets: [{ name: "MYASSET", amount: 1 }] };
+
+      await (GroundControlToMajorTom as any)._pushToFcm(mockDataSource, "bearer-token", "test-token", fcmPayload, pushNotification);
+
+      expect(fcmPayload.message.data).toEqual({ type: "2", level: "transactions", sat: "0", assets: '[{"name":"MYASSET","amount":1}]' });
     });
 
     it("should handle FCM network errors gracefully", async () => {

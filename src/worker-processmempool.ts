@@ -6,6 +6,7 @@ import { SendQueue } from "./entity/SendQueue";
 import dataSource from "./data-source";
 import { components } from "./openapi/api";
 import { buildNeuraiRpcClient } from "./neurai-rpc-client";
+import { PaymentUtils } from "./utils/paymentUtils";
 require("dotenv").config();
 
 const NEURAI_RPC = process.env.NEURAI_RPC;
@@ -14,11 +15,8 @@ if (!NEURAI_RPC) {
   process.exit();
 }
 
+// Optional: the public RPC endpoints don't expose ZMQ, so without it we poll.
 const NEURAI_ZMQ = process.env.NEURAI_ZMQ;
-if (!NEURAI_ZMQ) {
-  console.error("NEURAI_ZMQ env variable is not set");
-  process.exit();
-}
 
 const CHAIN = process.env.CHAIN;
 if (CHAIN !== "mainnet" && CHAIN !== "testnet") {
@@ -34,9 +32,9 @@ const client = buildNeuraiRpcClient(NEURAI_RPC);
 const processedTxids: Record<string, number> = {};
 const TXID_CACHE_TTL_MS = 30 * 60 * 1000;
 
-// ZMQ has no heartbeat; periodically sweep the mempool in case some
-// notifications dropped silently.
-const SAFETY_POLL_MS = 5 * 60 * 1000;
+// With ZMQ, sweeping the mempool is only a safety net (ZMQ has no heartbeat,
+// so notifications could drop silently); without it, it is how we find new txs.
+const POLL_MS = NEURAI_ZMQ ? 5 * 60 * 1000 : 9 * 1000;
 
 process
   .on("unhandledRejection", (reason, p) => {
@@ -64,39 +62,25 @@ async function processTx(txid: string) {
   }
   if (!txData || !txData.vout) return;
 
-  const addresses: string[] = [];
-  const allPotentialPushPayloadsArray: components["schemas"]["PushNotificationOnchainAddressGotUnconfirmedTransaction"][] = [];
-  for (const output of txData.vout) {
-    if (output.scriptPubKey && (output.scriptPubKey.addresses || output.scriptPubKey.address)) {
-      for (const address of output.scriptPubKey?.addresses ?? (output.scriptPubKey?.address ? [output.scriptPubKey?.address] : [])) {
-        addresses.push(address);
-        allPotentialPushPayloadsArray.push({
-          address,
-          txid: txData.txid,
-          sat: Math.floor(output.value * 100000000),
-          type: 3,
-          level: "transactions",
-          token: "",
-          os: "ios",
-        });
-      }
-    }
-  }
-  if (addresses.length === 0) return;
+  const outputs = PaymentUtils.outputs(txData);
+  if (outputs.length === 0) return;
 
-  const query = dataSource.getRepository(TokenToAddress).createQueryBuilder().where("address IN (:...address)", { address: addresses }).andWhere("chain = :chain", { chain: CHAIN });
-  for (const t2a of await query.getMany()) {
-    for (let payload of allPotentialPushPayloadsArray) {
-      if (t2a.address === payload.address) {
-        process.env.VERBOSE && console.log(`[${CHAIN}] enqueueing`, payload);
-        payload.os = t2a.os === "android" ? "android" : "ios";
-        payload.token = t2a.token;
-        payload.type = 3;
-        payload.level = "transactions";
-        payload.badge = 1;
-        await sendQueueRepository.save({ data: JSON.stringify(payload) });
-      }
-    }
+  const query = dataSource.getRepository(TokenToAddress).createQueryBuilder().where("address IN (:...address)", { address: outputs.map((output) => output.address) }).andWhere("chain = :chain", { chain: CHAIN });
+  // One push per device, however many of the transaction's outputs paid that device.
+  for (const payment of PaymentUtils.perDevice(outputs, await query.getMany())) {
+    const payload: components["schemas"]["PushNotificationOnchainAddressGotUnconfirmedTransaction"] = {
+      address: payment.address,
+      txid: txData.txid,
+      sat: payment.sat,
+      ...(payment.assets.length > 0 ? { assets: payment.assets } : {}),
+      type: 3,
+      level: "transactions",
+      token: payment.token,
+      os: payment.os === "android" ? "android" : "ios",
+      badge: 1,
+    };
+    process.env.VERBOSE && console.log(`[${CHAIN}] enqueueing`, payload);
+    await sendQueueRepository.save({ data: JSON.stringify(payload) });
   }
 }
 
@@ -123,16 +107,17 @@ dataSource
   .initialize()
   .then(async () => {
     console.log("db connected");
-    console.log(`running groundcontrol worker-processmempool on chain ${CHAIN} via ZMQ ${NEURAI_ZMQ}`);
+    console.log(`running groundcontrol worker-processmempool on chain ${CHAIN} via ${NEURAI_ZMQ ? `ZMQ ${NEURAI_ZMQ}` : `RPC polling every ${POLL_MS / 1000}s`}`);
 
     sendQueueRepository = dataSource.getRepository(SendQueue);
 
     // Initial sweep to backfill anything already in the mempool when we
-    // start, then a periodic safety net.
+    // start, then periodic sweeps.
     await safetySweep();
     setInterval(() => {
       safetySweep();
-    }, SAFETY_POLL_MS);
+    }, POLL_MS);
+    if (!NEURAI_ZMQ) return;
 
     const sock = new Subscriber();
     sock.connect(NEURAI_ZMQ);

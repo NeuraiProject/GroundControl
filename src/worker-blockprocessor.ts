@@ -8,6 +8,7 @@ import { TokenToTxid } from "./entity/TokenToTxid";
 import dataSource from "./data-source";
 import { components } from "./openapi/api";
 import { buildNeuraiRpcClient } from "./neurai-rpc-client";
+import { PaymentUtils } from "./utils/paymentUtils";
 require("dotenv").config();
 
 const NEURAI_RPC = process.env.NEURAI_RPC;
@@ -16,11 +17,8 @@ if (!NEURAI_RPC) {
   process.exit();
 }
 
+// Optional: the public RPC endpoints don't expose ZMQ, so without it we poll.
 const NEURAI_ZMQ = process.env.NEURAI_ZMQ;
-if (!NEURAI_ZMQ) {
-  console.error("NEURAI_ZMQ env variable is not set");
-  process.exit();
-}
 
 const CHAIN = process.env.CHAIN;
 if (CHAIN !== "mainnet" && CHAIN !== "testnet") {
@@ -45,9 +43,9 @@ const LAST_PROCESSED_BLOCK_KEY = `LAST_PROCESSED_BLOCK_${CHAIN}`;
 // chain reset (e.g. the DePIN testnet relaunch), where old heights are void.
 const GENESIS_BLOCK_HASH_KEY = `GENESIS_BLOCK_HASH_${CHAIN}`;
 
-// ZMQ has no heartbeat; if a silent failure drops notifications, this
-// catches us up periodically.
-const SAFETY_POLL_MS = 5 * 60 * 1000;
+// With ZMQ this is only a safety net (ZMQ has no heartbeat, so a silent
+// failure could drop notifications); without it, it is how we find new blocks.
+const POLL_MS = NEURAI_ZMQ ? 5 * 60 * 1000 : 10 * 1000;
 
 // neuraid's getblockchaininfo has no `initialblockdownload` flag, so mirror its
 // IsInitialBlockDownload(): a tip older than this means the node is syncing.
@@ -57,48 +55,36 @@ async function processBlockNum(blockNum: number, sendQueueRepository: Repository
   console.log(`[${CHAIN}] processing block`, blockNum);
   const responseGetblockhash = await client.request("getblockhash", [blockNum]);
   const responseGetblock = await client.request("getblock", [responseGetblockhash.result, 2]);
+  const txs = responseGetblock.result.tx.map((tx) => ({ txid: tx.txid, outputs: PaymentUtils.outputs(tx) }));
+  const txids: string[] = txs.map((tx) => tx.txid);
   const addresses: string[] = [];
-  const allPotentialPushPayloadsArray: components["schemas"]["PushNotificationOnchainAddressGotPaid"][] = [];
-  const txids: string[] = [];
-  for (const tx of responseGetblock.result.tx) {
-    txids.push(tx.txid);
-    if (tx.vout) {
-      for (const output of tx.vout) {
-        if (output.scriptPubKey && (output.scriptPubKey.addresses || output.scriptPubKey.address)) {
-          for (const address of output.scriptPubKey?.addresses ?? (output.scriptPubKey?.address ? [output.scriptPubKey?.address] : [])) {
-            addresses.push(address);
-            const payload: components["schemas"]["PushNotificationOnchainAddressGotPaid"] = {
-              address,
-              txid: tx.txid,
-              sat: Math.floor(output.value * 100000000),
-              type: 2,
-              level: "transactions",
-              token: "",
-              os: "ios",
-            };
-            allPotentialPushPayloadsArray.push(payload);
-          }
-        }
-      }
-    }
+  for (const tx of txs) {
+    for (const output of tx.outputs) addresses.push(output.address);
   }
 
   console.log(`[${CHAIN}]`, addresses.length, "addresses paid in block");
 
   if (addresses.length > 0) {
     const query = dataSource.getRepository(TokenToAddress).createQueryBuilder().where("address IN (:...address)", { address: addresses }).andWhere("chain = :chain", { chain: CHAIN });
+    const subscriptions = await query.getMany();
 
     let entities2save = [];
-    for (const t2a of await query.getMany()) {
-      for (let payload of allPotentialPushPayloadsArray) {
-        if (t2a.address === payload.address) {
-          process.env.VERBOSE && console.log(`[${CHAIN}] enqueueing`, payload);
-          payload.os = t2a.os === "android" ? "android" : "ios";
-          payload.token = t2a.token;
-          payload.type = 2;
-          payload.badge = 1;
-          entities2save.push({ data: JSON.stringify(payload) });
-        }
+    for (const tx of txs) {
+      // One push per device and transaction, however many of its outputs paid that device.
+      for (const payment of PaymentUtils.perDevice(tx.outputs, subscriptions)) {
+        const payload: components["schemas"]["PushNotificationOnchainAddressGotPaid"] = {
+          address: payment.address,
+          txid: tx.txid,
+          sat: payment.sat,
+          ...(payment.assets.length > 0 ? { assets: payment.assets } : {}),
+          type: 2,
+          level: "transactions",
+          token: payment.token,
+          os: payment.os === "android" ? "android" : "ios",
+          badge: 1,
+        };
+        process.env.VERBOSE && console.log(`[${CHAIN}] enqueueing`, payload);
+        entities2save.push({ data: JSON.stringify(payload) });
       }
     }
     if (entities2save.length > 0) {
@@ -164,22 +150,41 @@ async function catchUpToTip(KeyValueRepository: Repository<KeyValue>, sendQueueR
   }
 }
 
+// ZMQ, the poll timer and startup can all ask for a catch-up while one is
+// running, and overlapping runs would enqueue the same block twice. Serialise
+// them, folding requests that arrive mid-run into a single follow-up run.
+let catchUpRunning = false;
+let catchUpRequested = false;
+
+async function requestCatchUp(KeyValueRepository: Repository<KeyValue>, sendQueueRepository: Repository<SendQueue>) {
+  catchUpRequested = true;
+  if (catchUpRunning) return;
+  catchUpRunning = true;
+  while (catchUpRequested) {
+    catchUpRequested = false;
+    try {
+      await catchUpToTip(KeyValueRepository, sendQueueRepository);
+    } catch (e) {
+      console.warn(`[${CHAIN}] catch-up error:`, e);
+    }
+  }
+  catchUpRunning = false;
+}
+
 dataSource
   .initialize()
   .then(async () => {
     console.log("db connected");
-    console.log(`running groundcontrol worker-blockprocessor on chain ${CHAIN} via ZMQ ${NEURAI_ZMQ}`);
+    console.log(`running groundcontrol worker-blockprocessor on chain ${CHAIN} via ${NEURAI_ZMQ ? `ZMQ ${NEURAI_ZMQ}` : `RPC polling every ${POLL_MS / 1000}s`}`);
 
     const KeyValueRepository = dataSource.getRepository(KeyValue);
     const sendQueueRepository = dataSource.getRepository(SendQueue);
 
     // Catch up to current tip before listening to ZMQ.
-    await catchUpToTip(KeyValueRepository, sendQueueRepository);
+    await requestCatchUp(KeyValueRepository, sendQueueRepository);
 
-    // Safety net in case ZMQ silently stops delivering.
-    setInterval(() => {
-      catchUpToTip(KeyValueRepository, sendQueueRepository).catch((e) => console.warn(`[${CHAIN}] safety poll error:`, e));
-    }, SAFETY_POLL_MS);
+    setInterval(() => requestCatchUp(KeyValueRepository, sendQueueRepository), POLL_MS);
+    if (!NEURAI_ZMQ) return;
 
     const sock = new Subscriber();
     sock.connect(NEURAI_ZMQ);
@@ -187,11 +192,7 @@ dataSource
 
     for await (const [topicBuf, bodyBuf] of sock) {
       process.env.VERBOSE && console.log(`[${CHAIN}] zmq`, topicBuf.toString(), bodyBuf.toString("hex"));
-      try {
-        await catchUpToTip(KeyValueRepository, sendQueueRepository);
-      } catch (e) {
-        console.warn(`[${CHAIN}] hashblock handler error:`, e);
-      }
+      await requestCatchUp(KeyValueRepository, sendQueueRepository);
     }
   })
   .catch((error) => {

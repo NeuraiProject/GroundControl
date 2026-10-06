@@ -13,7 +13,7 @@ Built with TypeScript, Express, MariaDB and an OpenAPI spec (`openapi.yaml`).
 A single instance watches **both mainnet and testnet** in parallel. Subscriptions are tagged by `chain` in the DB, so a mainnet address and a testnet address that happen to share the same string never cross. Processes:
 
 - `web` — HTTP API (`/majorTomToGroundControl`, `/unsubscribe`, `/setTokenConfiguration`, …). The `chain` field is required on every subscribe/unsubscribe.
-- `worker-blockprocessor-mainnet` / `worker-blockprocessor-testnet` — one per chain. Polls the Neurai RPC for new blocks and enqueues pushes for chain-matching subscriptions.
+- `worker-blockprocessor-mainnet` / `worker-blockprocessor-testnet` — one per chain. Learns about new blocks from the node's ZMQ `hashblock` feed (or by polling the RPC every 10 s when `NEURAI_ZMQ` is unset) and enqueues pushes for chain-matching subscriptions: one per device and transaction, with the XNA and assets it received summed up.
 - `worker-processmempool-mainnet` / `worker-processmempool-testnet` — same for unconfirmed transactions.
 - `worker-sender` — chain-agnostic. Pulls from the shared `SendQueue` and dispatches via FCM/APNs.
 
@@ -65,7 +65,9 @@ Copy `.env.example` and fill in the real values.
 
   …or your own self-hosted nodes (`http://user:pass@host:port`). The block/mempool workers read `NEURAI_RPC` per container; `docker-compose.yml` wires each to its chain.
 
-  **Note on rate limits:** the workers hit the RPC continuously (every new block + every ~9 s for the mempool, plus one `getrawtransaction` per new mempool tx). For high-traffic deployments on mainnet, coordinate with whoever runs the public endpoint or self-host the node.
+  **Note on rate limits:** without ZMQ the workers poll the RPC continuously (every 10 s for blocks, every ~9 s for the mempool, plus one `getrawtransaction` per new mempool tx). For high-traffic deployments on mainnet, coordinate with whoever runs the public endpoint or self-host the node.
+
+- `NEURAI_ZMQ` — optional, per worker container: the node's ZMQ endpoint (`tcp://host:28332`, publishing `hashblock` and `hashtx`). When set, the workers react to ZMQ notifications and only poll every 5 min as a safety net. The public endpoints don't expose ZMQ, so leave it unset there; `docker/docker-compose.yml` sets it for its bundled nodes.
 
 - `APNS_P8` — hex-encoded contents of the APNs `.p8` key file from Apple Developer.
 - `APNS_P8_KID` — "Key ID" of that `.p8`.

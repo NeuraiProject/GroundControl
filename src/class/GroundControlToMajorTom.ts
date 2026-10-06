@@ -5,6 +5,7 @@ import { TokenToAddress } from "../entity/TokenToAddress";
 import { TokenToTxid } from "../entity/TokenToTxid";
 import { components } from "../openapi/api";
 import { StringUtils } from "../utils/stringUtils";
+import { AmountUtils } from "../utils/amountUtils";
 const jwt = require("jsonwebtoken");
 const http2 = require("http2");
 require("dotenv").config();
@@ -178,6 +179,11 @@ export class GroundControlToMajorTom {
   }
 
   static async pushOnchainAddressWasPaid(dataSource: DataSource, serverKey: string, apnsP8: string, pushNotification: components["schemas"]["PushNotificationOnchainAddressGotPaid"]): Promise<void> {
+    // One push covers everything the transaction paid this device, e.g. "+1.5 XNA, +10 MYASSET". Asset outputs
+    // carry (normally) 0 XNA, so XNA is left out when only assets arrived.
+    const amounts = (pushNotification.assets ?? []).map((asset) => "+" + AmountUtils.format(asset.amount) + " " + asset.name);
+    if (pushNotification.sat > 0 || amounts.length === 0) amounts.unshift("+" + AmountUtils.format(pushNotification.sat) + " XNA");
+    const title = amounts.join(", ");
     const fcmPayload = {
       message: {
         token: "",
@@ -186,7 +192,7 @@ export class GroundControlToMajorTom {
           tag: pushNotification.txid,
         },
         notification: {
-          title: "+" + (pushNotification.sat / 1e8).toFixed(8).replace(/\.?0+$/, "") + " XNA",
+          title,
           body: "Received on " + StringUtils.shortenAddress(pushNotification.address),
         },
       },
@@ -196,7 +202,7 @@ export class GroundControlToMajorTom {
       aps: {
         badge: pushNotification.badge,
         alert: {
-          title: "+" + (pushNotification.sat / 1e8).toFixed(8).replace(/\.?0+$/, "") + " XNA",
+          title,
           body: "Received on " + StringUtils.shortenAddress(pushNotification.address),
         },
         sound: "default",
@@ -290,7 +296,9 @@ export class GroundControlToMajorTom {
     // now, we pass some of the notification properties as data properties to FCM payload:
     for (let dataKey of Object.keys(pushNotification)) {
       if (["token", "os", "badge"].includes(dataKey)) continue;
-      fcmPayload["message"]["data"][dataKey] = String(pushNotification[dataKey]);
+      // FCM data values must be strings; nested ones (e.g. `assets`) travel as JSON.
+      const value = pushNotification[dataKey];
+      fcmPayload["message"]["data"][dataKey] = typeof value === "object" ? JSON.stringify(value) : String(value);
     }
 
     // @ts-ignore
