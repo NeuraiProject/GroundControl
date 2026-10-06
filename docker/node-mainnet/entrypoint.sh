@@ -15,7 +15,7 @@ rpcuser=neurai
 rpcpassword=changeme
 rpcbind=0.0.0.0
 rpcallowip=0.0.0.0/0
-rpcport=19101
+rpcport=19001
 rpcservertimeout=240
 rpcworkqueue=64
 rpcthreads=8
@@ -31,7 +31,7 @@ assetindex=1
 addressindex=1
 timestampindex=1
 spentindex=1
-pubkeyindex=1
+# pubkeyindex is not supported by the 1.0.x release binaries.
 
 # ZMQ — only reachable from the docker network (no host port mapped)
 zmqpubrawblock=tcp://0.0.0.0:28332

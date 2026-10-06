@@ -36,6 +36,23 @@ cp .env.example .env                   # fill in the credentials
 docker compose up --build
 ```
 
+## Neurai nodes (`docker/`)
+
+`docker/docker-compose.yml` runs the full stack, including one Neurai node per chain (RPC and ZMQ stay inside the compose network):
+
+| Chain   | Node                                                              | RPC   | ZMQ   |
+| ------- | ----------------------------------------------------------------- | ----- | ----- |
+| mainnet | `neuraiproject/neurai-node:v1.0.6` + `node-mainnet/neurai.conf`   | 19001 | 28332 |
+| testnet | Neurai 2.0.0 built from the `DePIN-Test` branch (`node-testnet/`) | 19101 | 28332 |
+
+The testnet image clones the branch at build time; rebuild it with `docker compose build --no-cache neurai-testnet` to pick up new consensus changes.
+
+### Upgrading from the 1.0.5 / pre-reset testnet stack
+
+- The 1.0.6 image keeps its datadir in `/data` (not `/data/node`) and runs `neuraid` as an unprivileged user, and the DePIN testnet was relaunched with a new genesis block. Both nodes therefore start on fresh volumes (`neurai_mainnet_data`, `neurai_testnet_data`) and resync from scratch. Once the new nodes are synced, the old `groundcontrol-neurai_mainnet_data` and `groundcontrol-neurai_testnet_data` volumes can be removed with `docker volume rm`.
+- The block workers wait while their node is syncing, and record each chain's genesis hash: when it changes (testnet reset) they restart from the new tip instead of waiting for the old block height.
+- `pubkeyindex` is only available on the DePIN testnet node; the 1.0.x mainnet release does not support it.
+
 ## Environment variables
 
 Copy `.env.example` and fill in the real values.

@@ -41,10 +41,17 @@ process
 const client = buildNeuraiRpcClient(NEURAI_RPC);
 
 const LAST_PROCESSED_BLOCK_KEY = `LAST_PROCESSED_BLOCK_${CHAIN}`;
+// Genesis hash of the chain LAST_PROCESSED_BLOCK refers to. Lets us notice a
+// chain reset (e.g. the DePIN testnet relaunch), where old heights are void.
+const GENESIS_BLOCK_HASH_KEY = `GENESIS_BLOCK_HASH_${CHAIN}`;
 
 // ZMQ has no heartbeat; if a silent failure drops notifications, this
 // catches us up periodically.
 const SAFETY_POLL_MS = 5 * 60 * 1000;
+
+// neuraid's getblockchaininfo has no `initialblockdownload` flag, so mirror its
+// IsInitialBlockDownload(): a tip older than this means the node is syncing.
+const MAX_TIP_AGE_S = 24 * 60 * 60;
 
 async function processBlockNum(blockNum: number, sendQueueRepository: Repository<SendQueue>) {
   console.log(`[${CHAIN}] processing block`, blockNum);
@@ -121,11 +128,27 @@ async function processBlockNum(blockNum: number, sendQueueRepository: Repository
 }
 
 async function catchUpToTip(KeyValueRepository: Repository<KeyValue>, sendQueueRepository: Repository<SendQueue>) {
+  // Don't walk the chain while the node is still syncing: we would push
+  // notifications for long-confirmed payments.
+  const chainInfo = (await client.request("getblockchaininfo", [])).result;
+  if (chainInfo.headers - chainInfo.blocks > 1 || Date.now() / 1000 - chainInfo.mediantime > MAX_TIP_AGE_S) {
+    console.log(`[${CHAIN}] node is syncing (${chainInfo.blocks}/${chainInfo.headers}), waiting`);
+    return;
+  }
+  const tip = +chainInfo.blocks;
+  const genesisHash = (await client.request("getblockhash", [0])).result;
+
   let keyVal = await KeyValueRepository.findOneBy({ key: LAST_PROCESSED_BLOCK_KEY });
-  const tip = +(await client.request("getblockcount", [])).result;
-  if (!keyVal) {
+  const genesisKeyVal = await KeyValueRepository.findOneBy({ key: GENESIS_BLOCK_HASH_KEY });
+  // Rows written before the genesis hash was recorded can't be compared; a
+  // last processed height above the synced tip gives a reset away instead.
+  const chainWasReset = genesisKeyVal ? genesisKeyVal.value !== genesisHash : !!keyVal && +keyVal.value > tip;
+  if (!genesisKeyVal || chainWasReset) {
+    await KeyValueRepository.save({ key: GENESIS_BLOCK_HASH_KEY, value: genesisHash });
+  }
+  if (!keyVal || chainWasReset) {
     await KeyValueRepository.save({ key: LAST_PROCESSED_BLOCK_KEY, value: String(tip) });
-    console.log(`[${CHAIN}] initialised at tip ${tip}`);
+    console.log(`[${CHAIN}] ${chainWasReset ? "chain reset detected, re-initialised" : "initialised"} at tip ${tip}`);
     return;
   }
   while (+keyVal.value < tip) {
