@@ -78,7 +78,13 @@ export type paths = {
     post: {
       responses: {
         /** OK */
-        200: unknown;
+        200: {
+          content: {
+            "application/json": {
+              instance_id?: components["schemas"]["InstanceId"];
+            } & { [key: string]: unknown };
+          };
+        };
       };
       requestBody: {
         content: {
@@ -121,7 +127,10 @@ export type components = {
       last_processed_block_testnet?: number;
       send_queue_size?: number;
       sent_24h?: number;
+      instance_id?: components["schemas"]["InstanceId"];
     } & { [key: string]: unknown };
+    /** @description Random id of this server's database. It changes when the database is wiped, and with it every subscription: a wallet that sees a new value must send its addresses again via /majorTomToGroundControl. */
+    InstanceId: string;
     /**
      * @description Neurai chain identifier. One GroundControl instance can watch both mainnet and testnet in parallel; subscriptions are scoped by this field.
      * @enum {string}

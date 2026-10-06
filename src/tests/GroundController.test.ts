@@ -64,6 +64,7 @@ vi.mock("crypto", () => ({
     update: vi.fn().mockReturnThis(),
     digest: vi.fn().mockReturnValue("6c60f404f8167a38fc70eaf8c17cd92e60f96e3f9dd9b6b5d3b9b5d5c5b5a5a5"),
   }),
+  randomBytes: vi.fn(),
 }));
 
 // Mock dotenv
@@ -93,6 +94,7 @@ describe("GroundController", () => {
   let mockDataSource: DataSource;
   let mockRepository: any;
   let mockQueryBuilder: any;
+  let mockKeyValueRepository: any;
   let groundController: any;
   let mockRequest: Partial<Request>;
   let mockResponse: Partial<Response>;
@@ -128,9 +130,18 @@ describe("GroundController", () => {
     // Mock QueryBuilder
     mockQueryBuilder = {
       delete: vi.fn().mockReturnThis(),
+      insert: vi.fn().mockReturnThis(),
+      into: vi.fn().mockReturnThis(),
+      values: vi.fn().mockReturnThis(),
+      orIgnore: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
       execute: vi.fn().mockResolvedValue({}),
       getCount: vi.fn().mockResolvedValue(10),
+    };
+
+    mockKeyValueRepository = {
+      findOneBy: vi.fn().mockResolvedValue({ key: "INSTANCE_ID", value: "existing-instance-id" }),
+      createQueryBuilder: vi.fn().mockReturnValue(mockQueryBuilder),
     };
 
     // Mock Repository
@@ -154,6 +165,7 @@ describe("GroundController", () => {
     mockResponse = {
       status: vi.fn().mockReturnThis(),
       send: vi.fn().mockReturnThis(),
+      json: vi.fn().mockReturnThis(),
     };
     mockNext = vi.fn();
 
@@ -166,6 +178,7 @@ describe("GroundController", () => {
     (groundController as any)._tokenToTxidRepository = mockRepository;
     (groundController as any)._tokenConfigurationRepository = mockRepository;
     (groundController as any)._sendQueueRepository = mockRepository;
+    (groundController as any)._keyValueRepository = mockKeyValueRepository;
   });
 
   afterEach(() => {
@@ -212,24 +225,48 @@ describe("GroundController", () => {
       };
     });
 
-    it("should save addresses and txids successfully", async () => {
+    it("should save addresses and txids with one INSERT IGNORE each", async () => {
       await groundController.majorTomToGroundControl(mockRequest, mockResponse, mockNext);
 
-      expect(mockRepository.save).toHaveBeenCalledTimes(2);
-      expect(mockRepository.save).toHaveBeenCalledWith({
-        address: "nq1qexampleneuraiaddress0000000000000000000",
-        token: "test-token",
-        os: "ios",
-        chain: "mainnet",
-      });
-      expect(mockRepository.save).toHaveBeenCalledWith({
-        txid: "txid123",
-        token: "test-token",
-        os: "ios",
-        chain: "mainnet",
-      });
+      expect(mockQueryBuilder.values).toHaveBeenCalledTimes(2);
+      expect(mockQueryBuilder.values).toHaveBeenCalledWith([
+        {
+          address: "nq1qexampleneuraiaddress0000000000000000000",
+          token: "test-token",
+          os: "ios",
+          chain: "mainnet",
+        },
+      ]);
+      expect(mockQueryBuilder.values).toHaveBeenCalledWith([
+        {
+          txid: "txid123",
+          token: "test-token",
+          os: "ios",
+          chain: "mainnet",
+        },
+      ]);
+      expect(mockQueryBuilder.orIgnore).toHaveBeenCalledTimes(2);
+      expect(mockQueryBuilder.execute).toHaveBeenCalledTimes(2);
       expect(mockResponse.status).toHaveBeenCalledWith(201);
       expect(mockResponse.send).toHaveBeenCalledWith("");
+    });
+
+    it("should drop duplicate and non-string entries", async () => {
+      mockRequest.body.addresses = ["addr1", "addr2", "addr1", 42];
+      mockRequest.body.txids = [];
+
+      await groundController.majorTomToGroundControl(mockRequest, mockResponse, mockNext);
+
+      expect(mockQueryBuilder.values).toHaveBeenCalledTimes(1);
+      expect(mockQueryBuilder.values.mock.calls[0][0].map((row) => row.address)).toEqual(["addr1", "addr2"]);
+    });
+
+    it("should report a database error so the wallet retries later", async () => {
+      mockQueryBuilder.execute.mockRejectedValueOnce(new Error("db down"));
+
+      await groundController.majorTomToGroundControl(mockRequest, mockResponse, mockNext);
+
+      expect(mockResponse.status).toHaveBeenCalledWith(500);
     });
 
     it("should reject missing chain", async () => {
@@ -274,7 +311,8 @@ describe("GroundController", () => {
 
         await groundController.majorTomToGroundControl(mockRequest, mockResponse, mockNext);
 
-        expect(mockRepository.save).toHaveBeenCalledTimes(1); // Only txid, not address
+        expect(mockQueryBuilder.values).toHaveBeenCalledTimes(1); // Only txid, not address
+        expect(mockQueryBuilder.values.mock.calls[0][0][0]).toHaveProperty("txid", "txid123");
         expect(mockResponse.status).toHaveBeenCalledWith(201);
       } finally {
         ignoreListMod.ADDRESS_IGNORE_LIST.length = 0;
@@ -287,7 +325,7 @@ describe("GroundController", () => {
 
       await groundController.majorTomToGroundControl(mockRequest, mockResponse, mockNext);
 
-      expect(mockRepository.save).not.toHaveBeenCalled();
+      expect(mockQueryBuilder.insert).not.toHaveBeenCalled();
       expect(mockResponse.status).toHaveBeenCalledWith(201);
     });
 
@@ -297,7 +335,7 @@ describe("GroundController", () => {
 
       await groundController.majorTomToGroundControl(mockRequest, mockResponse, mockNext);
 
-      expect(mockRepository.save).not.toHaveBeenCalled();
+      expect(mockQueryBuilder.insert).not.toHaveBeenCalled();
       expect(mockResponse.status).toHaveBeenCalledWith(201);
     });
   });
@@ -405,6 +443,7 @@ describe("GroundController", () => {
       expect(existingConfig.app_version).toBe("2.0.0");
       expect(mockRepository.save).toHaveBeenCalledWith(existingConfig);
       expect(mockResponse.status).toHaveBeenCalledWith(200);
+      expect(mockResponse.json).toHaveBeenCalledWith({ instance_id: "existing-instance-id" });
     });
 
     it("should create new token configuration if not found", async () => {
@@ -414,6 +453,23 @@ describe("GroundController", () => {
 
       expect(mockRepository.save).toHaveBeenCalled();
       expect(mockResponse.status).toHaveBeenCalledWith(200);
+    });
+  });
+
+  describe("getInstanceId", () => {
+    it("should return the stored id", async () => {
+      expect(await groundController.getInstanceId()).toBe("existing-instance-id");
+      expect(mockQueryBuilder.insert).not.toHaveBeenCalled();
+    });
+
+    it("should create an id on first use, keeping one a concurrent request may have stored", async () => {
+      const crypto = await import("crypto");
+      vi.mocked(crypto.randomBytes).mockReturnValue(Buffer.from("00112233445566778899aabbccddeeff", "hex") as any);
+      mockKeyValueRepository.findOneBy.mockResolvedValueOnce(null).mockResolvedValueOnce({ key: "INSTANCE_ID", value: "00112233445566778899aabbccddeeff" });
+
+      expect(await groundController.getInstanceId()).toBe("00112233445566778899aabbccddeeff");
+      expect(mockQueryBuilder.values).toHaveBeenCalledWith({ key: "INSTANCE_ID", value: "00112233445566778899aabbccddeeff" });
+      expect(mockQueryBuilder.orIgnore).toHaveBeenCalled();
     });
   });
 

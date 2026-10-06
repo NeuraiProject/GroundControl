@@ -12,7 +12,7 @@ Built with TypeScript, Express, MariaDB and an OpenAPI spec (`openapi.yaml`).
 
 A single instance watches **both mainnet and testnet** in parallel. Subscriptions are tagged by `chain` in the DB, so a mainnet address and a testnet address that happen to share the same string never cross. Processes:
 
-- `web` — HTTP API (`/majorTomToGroundControl`, `/unsubscribe`, `/setTokenConfiguration`, …). The `chain` field is required on every subscribe/unsubscribe.
+- `web` — HTTP API (`/majorTomToGroundControl`, `/unsubscribe`, `/setTokenConfiguration`, …). The `chain` field is required on every subscribe/unsubscribe. `/setTokenConfiguration` (called by the wallet on every start) and `/ping` return an `instance_id`, a random id of the database: when it changes, e.g. after the database was wiped, the wallet sends all its addresses again.
 - `worker-blockprocessor-mainnet` / `worker-blockprocessor-testnet` — one per chain. Learns about new blocks from the node's ZMQ `hashblock` feed (or by polling the RPC every 10 s when `NEURAI_ZMQ` is unset) and enqueues pushes for chain-matching subscriptions: one per device and transaction, with the XNA and assets it received summed up.
 - `worker-processmempool-mainnet` / `worker-processmempool-testnet` — same for unconfirmed transactions.
 - `worker-sender` — chain-agnostic. Pulls from the shared `SendQueue` and dispatches via FCM/APNs.

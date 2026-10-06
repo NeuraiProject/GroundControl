@@ -125,6 +125,13 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  instance_id:
+                    $ref: "#/components/schemas/InstanceId"
 
   /enqueue:
     post:
@@ -163,6 +170,12 @@ components:
           type: "number"
         sent_24h:
           type: "number"
+        instance_id:
+          $ref: "#/components/schemas/InstanceId"
+
+    InstanceId:
+      type: string
+      description: "Random id of this server's database. It changes when the database is wiped, and with it every subscription: a wallet that sees a new value must send its addresses again via /majorTomToGroundControl."
 
     NeuraiChain:
       type: string

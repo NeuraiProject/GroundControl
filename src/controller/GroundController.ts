@@ -1,5 +1,6 @@
 import { DataSource } from "typeorm";
 import { NextFunction, Request, Response } from "express";
+import { randomBytes } from "crypto";
 import { TokenToAddress } from "../entity/TokenToAddress";
 import { TokenToTxid } from "../entity/TokenToTxid";
 import { TokenConfiguration } from "../entity/TokenConfiguration";
@@ -17,12 +18,14 @@ if (!process.env.JAWSDB_MARIA_URL || !process.env.GOOGLE_KEY_FILE || !process.en
 }
 
 const LAST_PROCESSED_BLOCK = "LAST_PROCESSED_BLOCK";
+const INSTANCE_ID = "INSTANCE_ID";
 
 export class GroundController {
   private _tokenToAddressRepository;
   private _tokenToTxidRepository;
   private _tokenConfigurationRepository;
   private _sendQueueRepository;
+  private _keyValueRepository;
   private _connection: DataSource;
 
   constructor(connection: DataSource) {
@@ -65,6 +68,33 @@ export class GroundController {
     return this._sendQueueRepository;
   }
 
+  get keyValueRepository() {
+    if (this._keyValueRepository) {
+      return this._keyValueRepository;
+    }
+
+    this._keyValueRepository = this._connection.getRepository(KeyValue);
+    return this._keyValueRepository;
+  }
+
+  /**
+   * Random id of this server's database, created on first use. A wiped database gets a new one, which tells wallets
+   * that their subscriptions are gone and must be sent again.
+   */
+  async getInstanceId(): Promise<string> {
+    const existing = await this.keyValueRepository.findOneBy({ key: INSTANCE_ID });
+    if (existing) return existing.value;
+    // INSERT IGNORE: if a concurrent request created it first, keep theirs.
+    await this.keyValueRepository
+      .createQueryBuilder()
+      .insert()
+      .into(KeyValue)
+      .values({ key: INSTANCE_ID, value: randomBytes(16).toString("hex") })
+      .orIgnore()
+      .execute();
+    return (await this.keyValueRepository.findOneBy({ key: INSTANCE_ID })).value;
+  }
+
   /**
    * Submit Neurai on-chain addresses you wish to be notified about, associated to a specific push token. The token (FCM/APNs) and its OS identify the device.
    *
@@ -95,36 +125,27 @@ export class GroundController {
     }
     const chain: string = body.chain;
 
-    // todo: refactor into single batch save
-    for (const address of body.addresses) {
-      if (ADDRESS_IGNORE_LIST.includes(address)) {
-        continue;
+    // todo: validate Neurai addresses and txids
+    const unique = (value: string, index: number, all: string[]) => typeof value === "string" && all.indexOf(value) === index;
+    const addresses = body.addresses.filter(unique).filter((address) => !ADDRESS_IGNORE_LIST.includes(address));
+    const txids = body.txids.filter(unique);
+    console.log(body.token, chain, "->", addresses.length, "addresses,", txids.length, "txids");
+
+    // One INSERT IGNORE per table rather than a query per row: wallets re-send their whole address list after a
+    // database reset (see `getInstanceId`), and rows already subscribed are skipped by the unique indexes.
+    try {
+      if (addresses.length > 0) {
+        const rows = addresses.map((address) => ({ address, token: body.token, os: body.os, chain }));
+        await this.tokenToAddressRepository.createQueryBuilder().insert().into(TokenToAddress).values(rows).orIgnore().execute();
       }
-
-      // todo: validate Neurai address
-      console.log(body.token, chain, "->", address);
-      try {
-        await this.tokenToAddressRepository.save({
-          address,
-          token: body.token,
-          os: body.os,
-          chain,
-        });
-      } catch (_) {}
-    }
-
-    // todo: refactor into single batch save
-    for (const txid of body.txids) {
-      // todo: validate txid
-      console.log(body.token, chain, "->", txid);
-      try {
-        await this.tokenToTxidRepository.save({
-          txid,
-          token: body.token,
-          os: body.os,
-          chain,
-        });
-      } catch (_) {}
+      if (txids.length > 0) {
+        const rows = txids.map((txid) => ({ txid, token: body.token, os: body.os, chain }));
+        await this.tokenToTxidRepository.createQueryBuilder().insert().into(TokenToTxid).values(rows).orIgnore().execute();
+      }
+    } catch (error) {
+      console.warn("error saving subscriptions:", error.message);
+      response.status(500).send("could not save subscriptions");
+      return;
     }
     response.status(201).send("");
   }
@@ -187,6 +208,7 @@ export class GroundController {
       last_processed_block_testnet: keyValTestnet ? +keyValTestnet.value : 0,
       send_queue_size,
       sent_24h,
+      instance_id: await this.getInstanceId(),
     };
 
     return serverInfo;
@@ -215,7 +237,15 @@ export class GroundController {
     } catch (error) {
       console.warn(error.message);
     }
-    response.status(200).send("");
+
+    // Wallets call this on every start; the instance id lets them notice a database reset and re-subscribe.
+    const result: paths["/setTokenConfiguration"]["post"]["responses"]["200"]["content"]["application/json"] = {};
+    try {
+      result.instance_id = await this.getInstanceId();
+    } catch (error) {
+      console.warn(error.message);
+    }
+    response.status(200).json(result);
   }
 
   async enqueue(request: Request, response: Response, next: NextFunction) {
