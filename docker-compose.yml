@@ -6,7 +6,8 @@
 #   docker compose up --build
 #
 # Then point the wallet's "Settings → Notifications → developer panel" URI at
-# https://groundcontrol.<your-domain>  (or http://<host-ip>:3001 for local dev).
+# https://groundcontrol.<your-domain>. Nginx on the host proxies to
+# http://127.0.0.1:3111 (also available there for local development).
 
 services:
   mariadb:
@@ -36,7 +37,8 @@ services:
       VERBOSE: ${VERBOSE}
     command: npm start
     ports:
-      - "3001:3001"
+      # Only Nginx and other processes on the Docker host can reach this port.
+      - "127.0.0.1:3111:3001"
 
   # ---- Chain watchers: one block + one mempool worker per chain ------------
 

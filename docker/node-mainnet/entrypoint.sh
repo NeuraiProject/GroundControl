@@ -31,7 +31,7 @@ assetindex=1
 addressindex=1
 timestampindex=1
 spentindex=1
-# pubkeyindex is not supported by the 1.0.x release binaries.
+# pubkeyindex, silentpaymentindex and channelmessageindex require Neurai 2.0.0.
 
 # ZMQ — only reachable from the docker network (no host port mapped)
 zmqpubrawblock=tcp://0.0.0.0:28332

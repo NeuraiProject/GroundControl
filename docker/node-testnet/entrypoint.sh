@@ -35,6 +35,12 @@ timestampindex=1
 spentindex=1
 pubkeyindex=1
 
+# Neurai 2.0.0 light-client indexes (not supported by mainnet 1.0.7).
+# Keep block/undo data: these indexes catch up from it at startup.
+prune=0
+silentpaymentindex=1
+channelmessageindex=1
+
 # ZMQ — only reachable from the docker network (no host port mapped)
 zmqpubrawblock=tcp://0.0.0.0:28332
 zmqpubrawtx=tcp://0.0.0.0:28332

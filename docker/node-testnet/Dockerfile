@@ -34,11 +34,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /root
 
-# Branch, tag or release to build. The branch moves with consensus changes, so
-# rebuild with `--no-cache` (or pin a tag here) to pick up new commits.
-ARG NEURAI_REF=DePIN-Test
-RUN git clone --depth 1 --branch "${NEURAI_REF}" \
-    https://github.com/NeuraiProject/Neurai.git
+# Reviewed DePIN-Test revision. Pinning the commit also invalidates Docker's
+# source cache when this value changes. Override with --build-arg NEURAI_REF=...
+# to build another commit, tag or branch (moving branches need --no-cache).
+ARG NEURAI_REF=c665ba3106a9fa76436a3dadca002619eda5d3ea
+RUN git init Neurai \
+ && cd Neurai \
+ && git remote add origin https://github.com/NeuraiProject/Neurai.git \
+ && git fetch --depth 1 origin "${NEURAI_REF}" \
+ && git checkout --detach FETCH_HEAD
 
 WORKDIR /root/Neurai/depends
 

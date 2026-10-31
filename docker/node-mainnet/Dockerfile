@@ -30,8 +30,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /root
 
 # Pinned to the mainnet release tag (same code as the prebuilt
-# neuraiproject/neurai-node:v1.0.6 image used by docker-compose.yml).
-ARG NEURAI_REF=1.0.6
+# neuraiproject/neurai-node:v1.0.7 image used by docker-compose.yml).
+ARG NEURAI_REF=1.0.7
 RUN git clone --depth 1 --branch "${NEURAI_REF}" \
     https://github.com/NeuraiProject/Neurai.git
 

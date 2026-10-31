@@ -36,22 +36,77 @@ cp .env.example .env                   # fill in the credentials
 docker compose up --build
 ```
 
+### Nginx on the Docker host
+
+Both Compose files publish the HTTP API as `127.0.0.1:3111:3001`: host port `3111` forwards to container port `3001` and is bound only to the host's loopback address. Configure Nginx on that host to proxy the public HTTPS domain to it:
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:3111;
+    proxy_set_header Host $host;
+}
+```
+
+Set the wallet's notification server URL to the public HTTPS domain. After changing the port mapping, recreate the web service with `docker compose up -d web` (or `docker compose -f docker/docker-compose.yml up -d web` for the bundled-node stack).
+
+If Nginx runs in another container, connect it to the same Docker network and use `http://web:3001` as the upstream instead; `127.0.0.1` inside that container refers to Nginx itself.
+
 ## Neurai nodes (`docker/`)
 
 `docker/docker-compose.yml` runs the full stack, including one Neurai node per chain (RPC and ZMQ stay inside the compose network):
 
-| Chain   | Node                                                              | RPC   | ZMQ   |
-| ------- | ----------------------------------------------------------------- | ----- | ----- |
-| mainnet | `neuraiproject/neurai-node:v1.0.6` + `node-mainnet/neurai.conf`   | 19001 | 28332 |
-| testnet | Neurai 2.0.0 built from the `DePIN-Test` branch (`node-testnet/`) | 19101 | 28332 |
+| Chain   | Node                                                                                           | RPC   | ZMQ   |
+| ------- | ---------------------------------------------------------------------------------------------- | ----- | ----- |
+| mainnet | `neuraiproject/neurai-node:v1.0.7` + `node-mainnet/neurai.conf`                                | 19001 | 28332 |
+| testnet | Neurai 2.0.0, `DePIN-Test` commit `c665ba3106a9fa76436a3dadca002619eda5d3ea` (`node-testnet/`) | 19101 | 28332 |
 
-The testnet image clones the branch at build time; rebuild it with `docker compose build --no-cache neurai-testnet` to pick up new consensus changes.
+Run the following commands from the repository root to update the bundled nodes. If you already have a 2.0.0 testnet data volume, complete the one-time reindex procedure below before the final `up` command:
+
+```shell
+docker compose -f docker/docker-compose.yml pull neurai-mainnet
+docker compose -f docker/docker-compose.yml build neurai-testnet
+docker compose -f docker/docker-compose.yml up -d --build
+```
+
+Testnet is pinned to a reviewed upstream commit: update `NEURAI_REF` in `docker/node-testnet/Dockerfile` when adopting new consensus changes. This also invalidates the cached source checkout. To try another revision without editing the default, use `docker compose -f docker/docker-compose.yml build --build-arg NEURAI_REF=<commit-or-tag> neurai-testnet`. A moving branch requires `--no-cache` to fetch its latest code.
+
+### Node indexes
+
+Both nodes keep `txindex`, `assetindex`, `addressindex`, `timestampindex` and `spentindex` enabled. Mainnet 1.0.7 does not support `pubkeyindex`, `silentpaymentindex` or `channelmessageindex`.
+
+Testnet also enables:
+
+- `pubkeyindex=1` — revealed public keys for `getpubkey` and DePIN clients.
+- `silentpaymentindex=1` — NIP-047 tweaks and witness v3 outputs for light clients.
+- `channelmessageindex=1` — NIP-048 asset channel messages, independent of the node wallet.
+- `prune=0` — retain the block and undo data needed to build these indexes.
+
+The silent-payment and channel-message indexes catch up at startup on an unpruned node. They make the corresponding RPC/REST queries available; GroundControl's workers still notify subscriptions by transaction output address and do not scan silent-payment tweaks or send channel-message notifications. See the [upstream index and upgrade notes](https://github.com/NeuraiProject/Neurai/blob/c665ba3106a9fa76436a3dadca002619eda5d3ea/doc/release-notes.md#indexes-and-rest).
+
+### Upgrading an existing 2.0.0 testnet node
+
+This testnet revision changes the internal format of `addressindex`, `spentindex` and `pubkeyindex`. An older indexed data directory needs a **one-time full `-reindex`**; `-reindex-chainstate` does not rebuild these indexes. Fresh volumes do not need this step. The mainnet 1.0.6 → 1.0.7 update keeps the existing indexes and volume.
+
+After building the new testnet image, stop the testnet node and its workers, then reindex the same volume in the foreground:
+
+```shell
+docker compose -f docker/docker-compose.yml stop neurai-testnet worker-blockprocessor-testnet worker-processmempool-testnet
+docker compose -f docker/docker-compose.yml run --rm --no-deps neurai-testnet -reindex
+```
+
+Wait for `Reindexing finished` and for the node to catch up, then press Ctrl-C and wait for shutdown to finish. Start the normal services again:
+
+```shell
+docker compose -f docker/docker-compose.yml up -d neurai-testnet worker-blockprocessor-testnet worker-processmempool-testnet
+```
+
+Keep `-reindex` out of the normal configuration so subsequent starts reuse the rebuilt indexes. These commands preserve the chain and MariaDB volumes.
 
 ### Upgrading from the 1.0.5 / pre-reset testnet stack
 
 - The 1.0.6 image keeps its datadir in `/data` (not `/data/node`) and runs `neuraid` as an unprivileged user, and the DePIN testnet was relaunched with a new genesis block. Both nodes therefore start on fresh volumes (`neurai_mainnet_data`, `neurai_testnet_data`) and resync from scratch. Once the new nodes are synced, the old `groundcontrol-neurai_mainnet_data` and `groundcontrol-neurai_testnet_data` volumes can be removed with `docker volume rm`.
 - The block workers wait while their node is syncing, and record each chain's genesis hash: when it changes (testnet reset) they restart from the new tip instead of waiting for the old block height.
-- `pubkeyindex` is only available on the DePIN testnet node; the 1.0.x mainnet release does not support it.
+- The extra testnet indexes and the reindex procedure for existing 2.0.0 data directories are described above.
 
 ## Environment variables
 

@@ -9,7 +9,7 @@ services:
     # 19001 + ZMQ 28332, matching the workers below) so the entrypoint keeps it
     # instead of generating one from NEURAI_* env vars.
     # https://hub.docker.com/r/neuraiproject/neurai-node/tags
-    image: neuraiproject/neurai-node:v1.0.6
+    image: neuraiproject/neurai-node:v1.0.7
     container_name: groundcontrol-neurai-mainnet
     restart: unless-stopped
     # neuraid needs time to flush its databases on shutdown; killing it early
@@ -37,7 +37,8 @@ services:
       start_period: 10m
 
   neurai-testnet:
-    # DePIN testnet (Neurai 2.0.0), built from the DePIN-Test branch.
+    # DePIN testnet (Neurai 2.0.0), pinned to a reviewed DePIN-Test commit
+    # in node-testnet/Dockerfile so builds cannot silently use stale code.
     build: ./node-testnet
     container_name: groundcontrol-neurai-testnet
     restart: unless-stopped
@@ -89,7 +90,8 @@ services:
       JAWSDB_MARIA_URL: mysql://groundcontrol:secret@mariadb:3306/groundcontrol
     command: npm start
     ports:
-      - "3001:3001"
+      # Nginx runs on the Docker host and proxies to this loopback port.
+      - "127.0.0.1:3111:3001"
     networks:
       - groundcontrol-neurai-net
 
