@@ -56,7 +56,7 @@ async function processTx(txid: string) {
   try {
     const response = await client.request("getrawtransaction", [txid, true]);
     txData = response.result;
-  } catch (e: any) {
+  } catch (e) {
     process.env.VERBOSE && console.warn(`[${CHAIN}] getrawtransaction ${txid} failed:`, e?.message);
     return;
   }
@@ -65,14 +65,17 @@ async function processTx(txid: string) {
   const outputs = PaymentUtils.outputs(txData);
   if (outputs.length === 0) return;
 
-  const query = dataSource.getRepository(TokenToAddress).createQueryBuilder().where("address IN (:...address)", { address: outputs.map((output) => output.address) }).andWhere("chain = :chain", { chain: CHAIN });
+  const query = dataSource
+    .getRepository(TokenToAddress)
+    .createQueryBuilder()
+    .where("address IN (:...address)", { address: outputs.map((output) => output.address) })
+    .andWhere("chain = :chain", { chain: CHAIN });
   // One push per device, however many of the transaction's outputs paid that device.
   for (const payment of PaymentUtils.perDevice(outputs, await query.getMany())) {
     const payload: components["schemas"]["PushNotificationOnchainAddressGotUnconfirmedTransaction"] = {
       address: payment.address,
       txid: txData.txid,
-      sat: payment.sat,
-      ...(payment.assets.length > 0 ? { assets: payment.assets } : {}),
+      ...PaymentUtils.toJson(payment),
       type: 3,
       level: "transactions",
       token: payment.token,
@@ -97,7 +100,7 @@ async function safetySweep() {
     for (const txid of response.result) {
       if (!processedTxids[txid]) await processTx(txid);
     }
-  } catch (e: any) {
+  } catch (e) {
     console.warn(`[${CHAIN}] safety sweep error:`, e?.message);
   }
   gcCache();

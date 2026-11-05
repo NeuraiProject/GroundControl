@@ -58,9 +58,9 @@ If Nginx runs in another container, connect it to the same Docker network and us
 | Chain   | Node                                                                                           | RPC   | ZMQ   |
 | ------- | ---------------------------------------------------------------------------------------------- | ----- | ----- |
 | mainnet | `neuraiproject/neurai-node:v1.0.7` + `node-mainnet/neurai.conf`                                | 19001 | 28332 |
-| testnet | Neurai 2.0.0, `DePIN-Test` commit `c665ba3106a9fa76436a3dadca002619eda5d3ea` (`node-testnet/`) | 19101 | 28332 |
+| testnet | Neurai 2.0.0, `DePIN-Test` commit `7f1773e538c210212441bd723eb8ea3ba99a00ef` (`node-testnet/`) | 19101 | 28332 |
 
-Run the following commands from the repository root to update the bundled nodes. If you already have a 2.0.0 testnet data volume, complete the one-time reindex procedure below before the final `up` command:
+Run the following commands from the repository root to update the bundled nodes. If you ran a testnet node before 2026-11-05, read the testnet reset notes below first:
 
 ```shell
 docker compose -f docker/docker-compose.yml pull neurai-mainnet
@@ -81,32 +81,24 @@ Testnet also enables:
 - `channelmessageindex=1` — NIP-048 asset channel messages, independent of the node wallet.
 - `prune=0` — retain the block and undo data needed to build these indexes.
 
-The silent-payment and channel-message indexes catch up at startup on an unpruned node. They make the corresponding RPC/REST queries available; GroundControl's workers still notify subscriptions by transaction output address and do not scan silent-payment tweaks or send channel-message notifications. See the [upstream index and upgrade notes](https://github.com/NeuraiProject/Neurai/blob/c665ba3106a9fa76436a3dadca002619eda5d3ea/doc/release-notes.md#indexes-and-rest).
+The silent-payment and channel-message indexes catch up at startup on an unpruned node. They make the corresponding RPC/REST queries available; GroundControl's workers still notify subscriptions by transaction output address and do not scan silent-payment tweaks or send channel-message notifications. See the [upstream index and upgrade notes](https://github.com/NeuraiProject/Neurai/blob/7f1773e538c210212441bd723eb8ea3ba99a00ef/doc/release-notes.md#indexes-and-rest).
 
-### Upgrading an existing 2.0.0 testnet node
+### Testnet reset of 2026-11-05
 
-This testnet revision changes the internal format of `addressindex`, `spentindex` and `pubkeyindex`. An older indexed data directory needs a **one-time full `-reindex`**; `-reindex-chainstate` does not rebuild these indexes. Fresh volumes do not need this step. The mainnet 1.0.6 → 1.0.7 update keeps the existing indexes and volume.
-
-After building the new testnet image, stop the testnet node and its workers, then reindex the same volume in the foreground:
+The testnet restarted from a new genesis block (`000000c710413a4265a996d30c86043aedef6a563900f1bc43fea61d5b2dc77d`) and requires protocol 70031, so nodes built from earlier commits are refused by its peers. The node also refuses to start on the data directory of the previous testnet (wrong genesis block), so the compose file now mounts a new volume, `neurai_testnet_20261105_data`, and the testnet node syncs the new chain from scratch. See the [upstream testnet reset notes](https://github.com/NeuraiProject/Neurai/blob/7f1773e538c210212441bd723eb8ea3ba99a00ef/doc/release-notes.md#testnet-reset).
 
 ```shell
-docker compose -f docker/docker-compose.yml stop neurai-testnet worker-blockprocessor-testnet worker-processmempool-testnet
-docker compose -f docker/docker-compose.yml run --rm --no-deps neurai-testnet -reindex
-```
-
-Wait for `Reindexing finished` and for the node to catch up, then press Ctrl-C and wait for shutdown to finish. Start the normal services again:
-
-```shell
+docker compose -f docker/docker-compose.yml build neurai-testnet
 docker compose -f docker/docker-compose.yml up -d neurai-testnet worker-blockprocessor-testnet worker-processmempool-testnet
 ```
 
-Keep `-reindex` out of the normal configuration so subsequent starts reuse the rebuilt indexes. These commands preserve the chain and MariaDB volumes.
+The testnet block worker notices the new genesis hash and starts from the new tip; it does not wait for the old block height. MariaDB keeps the subscriptions: testnet addresses keep their format, and transaction subscriptions of the previous chain simply never confirm. Once the new node is synced, the previous chain's volume can be removed with `docker volume rm groundcontrol-neurai_neurai_testnet_data`.
 
 ### Upgrading from the 1.0.5 / pre-reset testnet stack
 
 - The 1.0.6 image keeps its datadir in `/data` (not `/data/node`) and runs `neuraid` as an unprivileged user, and the DePIN testnet was relaunched with a new genesis block. Both nodes therefore start on fresh volumes (`neurai_mainnet_data`, `neurai_testnet_data`) and resync from scratch. Once the new nodes are synced, the old `groundcontrol-neurai_mainnet_data` and `groundcontrol-neurai_testnet_data` volumes can be removed with `docker volume rm`.
 - The block workers wait while their node is syncing, and record each chain's genesis hash: when it changes (testnet reset) they restart from the new tip instead of waiting for the old block height.
-- The extra testnet indexes and the reindex procedure for existing 2.0.0 data directories are described above.
+- The extra testnet indexes are described above.
 
 ## Environment variables
 

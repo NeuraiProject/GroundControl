@@ -44,7 +44,7 @@ services:
     restart: unless-stopped
     stop_grace_period: 5m
     volumes:
-      - neurai_testnet_data:/data
+      - neurai_testnet_20261105_data:/data
     networks:
       - groundcontrol-neurai-net
     logging:
@@ -179,11 +179,13 @@ services:
       - groundcontrol-neurai-net
 
 volumes:
-  # Fresh volumes for the 1.0.6 mainnet image (datadir moved from /data/node to
-  # /data, owned by the `neurai` user) and the reset DePIN testnet. The old
-  # `mainnet_data` / `testnet_data` volumes are no longer used.
+  # Fresh volume for the 1.0.6 mainnet image (datadir moved from /data/node to
+  # /data, owned by the `neurai` user); the old `mainnet_data` is no longer used.
   neurai_mainnet_data:
-  neurai_testnet_data:
+  # Testnet restarted from a new genesis on 2026-11-05. The node refuses to
+  # start on the previous chain's data, so it gets a new volume; the old
+  # `neurai_testnet_data` and `testnet_data` volumes are no longer used.
+  neurai_testnet_20261105_data:
   mariadb_data:
 
 networks:

@@ -1,12 +1,16 @@
 import { AmountUtils } from "./amountUtils";
 
-export type AssetAmount = { name: string; amount: number };
+/** An asset amount in exact base units (1 unit = 100,000,000). */
+export type AssetAmount = { name: string; amount: bigint };
 
 /** One address paid by one transaction output. */
-export type PaidOutput = { n: number; address: string; sat: number; asset?: AssetAmount };
+export type PaidOutput = { n: number; address: string; sat: bigint; asset?: AssetAmount };
 
 /** Everything one transaction paid to the addresses of one subscribed device. */
-export type DevicePayment = { token: string; os: string; address: string; sat: number; assets: AssetAmount[] };
+export type DevicePayment = { token: string; os: string; address: string; sat: bigint; assets: AssetAmount[] };
+
+/** The amounts of a push payload: numbers while they are exact in JavaScript, decimal text beyond. */
+export type PaymentJson = { sat: number | string; assets?: { name: string; amount: number | string }[] };
 
 export class PaymentUtils {
   /**
@@ -43,7 +47,7 @@ export class PaymentUtils {
 
         let payment = payments.find((p) => p.token === subscription.token);
         if (!payment) {
-          payment = { token: subscription.token, os: subscription.os, address: output.address, sat: 0, assets: [] };
+          payment = { token: subscription.token, os: subscription.os, address: output.address, sat: BigInt(0), assets: [] };
           payments.push(payment);
         }
         payment.sat += output.sat;
@@ -55,5 +59,13 @@ export class PaymentUtils {
       }
     }
     return payments;
+  }
+
+  /** The `sat` and `assets` fields of a push payload for one device payment. */
+  static toJson(payment: DevicePayment): PaymentJson {
+    return {
+      sat: AmountUtils.toJson(payment.sat),
+      ...(payment.assets.length > 0 ? { assets: payment.assets.map((asset) => ({ name: asset.name, amount: AmountUtils.toJson(asset.amount) })) } : {}),
+    };
   }
 }

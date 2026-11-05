@@ -150,8 +150,8 @@ export type components = {
     AssetAmount: {
       /** @description asset name, e.g. `MYASSET` or its owner token `MYASSET!` */
       name: string;
-      /** @description amount in the asset's smallest unit (1 unit = 100,000,000) */
-      amount: number;
+      /** @description amount in the asset's smallest unit (1 unit = 100,000,000). A JSON integer up to 2^53 - 1 (9007199254740991) and a string of decimal digits beyond, so no digit is lost. */
+      amount: number | string;
     } & { [key: string]: unknown };
     /** @description payload for push notification delivered to phone */
     PushNotificationBase: {
@@ -177,8 +177,8 @@ export type components = {
         type?: 2;
         /** @enum {string} */
         level?: "transactions";
-        /** @description XNA the transaction sent to this device's addresses, summed over all its outputs, in the smallest XNA unit (1 XNA = 100,000,000 sat). One push covers the whole transaction. */
-        sat: number;
+        /** @description XNA the transaction sent to this device's addresses, summed over all its outputs, in the smallest XNA unit (1 XNA = 100,000,000 sat). One push covers the whole transaction. A JSON integer up to 2^53 - 1 (9007199254740991) and a string of decimal digits beyond, so no digit is lost. */
+        sat: number | string;
         /** @description user's Neurai on-chain address that has an incoming transaction (the first one, if the transaction paid several of the device's addresses) */
         address: string;
         /** @description txid of the transaction where this address is one of the outputs */
@@ -192,8 +192,8 @@ export type components = {
         type?: 3;
         /** @enum {string} */
         level?: "transactions";
-        /** @description XNA the transaction sent to this device's addresses, summed over all its outputs, in the smallest XNA unit (1 XNA = 100,000,000 sat). One push covers the whole transaction. */
-        sat: number;
+        /** @description XNA the transaction sent to this device's addresses, summed over all its outputs, in the smallest XNA unit (1 XNA = 100,000,000 sat). One push covers the whole transaction. A JSON integer up to 2^53 - 1 (9007199254740991) and a string of decimal digits beyond, so no digit is lost. */
+        sat: number | string;
         /** @description user's Neurai on-chain address that has an incoming transaction (the first one, if the transaction paid several of the device's addresses) */
         address: string;
         /** @description txid of the transaction where this address is one of the outputs */

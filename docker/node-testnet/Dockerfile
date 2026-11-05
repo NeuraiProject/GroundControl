@@ -34,10 +34,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /root
 
-# Reviewed DePIN-Test revision. Pinning the commit also invalidates Docker's
-# source cache when this value changes. Override with --build-arg NEURAI_REF=...
+# Reviewed DePIN-Test revision: the testnet restarted on 2026-11-05 (genesis
+# 000000c7…2dc77d, protocol 70031; earlier builds are refused by its peers).
+# Pinning the commit also invalidates Docker's source cache when this value
+# changes. Override with --build-arg NEURAI_REF=...
 # to build another commit, tag or branch (moving branches need --no-cache).
-ARG NEURAI_REF=c665ba3106a9fa76436a3dadca002619eda5d3ea
+ARG NEURAI_REF=7f1773e538c210212441bd723eb8ea3ba99a00ef
 RUN git init Neurai \
  && cd Neurai \
  && git remote add origin https://github.com/NeuraiProject/Neurai.git \

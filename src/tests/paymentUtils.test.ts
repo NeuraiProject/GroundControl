@@ -19,14 +19,14 @@ describe("PaymentUtils", () => {
   describe("outputs", () => {
     it("should list every paid address with XNA in base units and the asset, if any", () => {
       expect(PaymentUtils.outputs(selfSendTx)).toEqual([
-        { n: 0, address: MINE, sat: 898996868500 },
-        { n: 1, address: MINE, sat: 0, asset: { name: "&CHAT!", amount: 100000000 } },
-        { n: 2, address: MINE, sat: 0, asset: { name: "&CHAT", amount: 99999900000000 } },
+        { n: 0, address: MINE, sat: 898996868500n },
+        { n: 1, address: MINE, sat: 0n, asset: { name: "&CHAT!", amount: 100000000n } },
+        { n: 2, address: MINE, sat: 0n, asset: { name: "&CHAT", amount: 99999900000000n } },
       ]);
     });
 
     it("should accept the singular `address` field", () => {
-      expect(PaymentUtils.outputs({ vout: [{ value: 1, scriptPubKey: { address: OTHER } }] })).toEqual([{ n: 0, address: OTHER, sat: 100000000 }]);
+      expect(PaymentUtils.outputs({ vout: [{ value: 1, scriptPubKey: { address: OTHER } }] })).toEqual([{ n: 0, address: OTHER, sat: 100000000n }]);
     });
 
     it("should handle transactions without outputs", () => {
@@ -43,10 +43,10 @@ describe("PaymentUtils", () => {
           token: "tok-a",
           os: "android",
           address: MINE,
-          sat: 898996868500,
+          sat: 898996868500n,
           assets: [
-            { name: "&CHAT!", amount: 100000000 },
-            { name: "&CHAT", amount: 99999900000000 },
+            { name: "&CHAT!", amount: 100000000n },
+            { name: "&CHAT", amount: 99999900000000n },
           ],
         },
       ]);
@@ -61,27 +61,52 @@ describe("PaymentUtils", () => {
         ],
       };
       const payments = PaymentUtils.perDevice(PaymentUtils.outputs(tx), [device, { ...device, address: OTHER }]);
-      expect(payments).toEqual([{ token: "tok-a", os: "android", address: OTHER, sat: 25000000, assets: [{ name: "GOLD", amount: 350000000 }] }]);
+      expect(payments).toEqual([{ token: "tok-a", os: "android", address: OTHER, sat: 25000000n, assets: [{ name: "GOLD", amount: 350000000n }] }]);
     });
 
     it("should give each subscribed device its own payment", () => {
       const tx = { vout: [{ value: 1, scriptPubKey: { addresses: [MINE] } }] };
       const payments = PaymentUtils.perDevice(PaymentUtils.outputs(tx), [device, { token: "tok-b", os: "ios", address: MINE }]);
       expect(payments.map((p) => [p.token, p.sat])).toEqual([
-        ["tok-a", 100000000],
-        ["tok-b", 100000000],
+        ["tok-a", 100000000n],
+        ["tok-b", 100000000n],
       ]);
     });
 
     it("should count a multisig output once even if the device subscribed to several of its addresses", () => {
       const tx = { vout: [{ value: 2, scriptPubKey: { type: "multisig", addresses: [MINE, OTHER] } }] };
       const payments = PaymentUtils.perDevice(PaymentUtils.outputs(tx), [device, { ...device, address: OTHER }]);
-      expect(payments).toEqual([{ token: "tok-a", os: "android", address: MINE, sat: 200000000, assets: [] }]);
+      expect(payments).toEqual([{ token: "tok-a", os: "android", address: MINE, sat: 200000000n, assets: [] }]);
     });
 
     it("should ignore outputs to addresses nobody subscribed to", () => {
       const tx = { vout: [{ value: 1, scriptPubKey: { addresses: [OTHER] } }] };
       expect(PaymentUtils.perDevice(PaymentUtils.outputs(tx), [device])).toEqual([]);
+    });
+
+    it("should sum amounts beyond 2^53 base units exactly", () => {
+      // As the RPC client returns them: decimal text when no JavaScript number holds the digits.
+      const tx = {
+        vout: [
+          { value: "60000000.00000001", scriptPubKey: { addresses: [MINE] } },
+          { value: "60000000.00000002", scriptPubKey: { addresses: [MINE] } },
+          { value: 0, scriptPubKey: { addresses: [MINE], asset: { name: "BIG", amount: "1000000000.12345678" } } },
+          { value: 0, scriptPubKey: { addresses: [MINE], asset: { name: "BIG", amount: "999999999.87654322" } } },
+        ],
+      };
+      const [payment] = PaymentUtils.perDevice(PaymentUtils.outputs(tx), [device]);
+      expect(payment.sat).toBe(12000000000000003n);
+      expect(payment.assets).toEqual([{ name: "BIG", amount: 200000000000000000n }]);
+    });
+  });
+
+  describe("toJson", () => {
+    it("should keep exact amounts as numbers and larger ones as digit strings", () => {
+      const payment = { token: "tok-a", os: "android", address: MINE, sat: 12000000000000003n, assets: [{ name: "BIG", amount: 1n }] };
+      expect(PaymentUtils.toJson(payment)).toEqual({ sat: "12000000000000003", assets: [{ name: "BIG", amount: 1 }] });
+      expect(PaymentUtils.toJson({ ...payment, sat: 5n, assets: [] })).toEqual({ sat: 5 });
+      // The queue stores the payload as JSON text: it must serialize.
+      expect(JSON.parse(JSON.stringify(PaymentUtils.toJson(payment))).sat).toBe("12000000000000003");
     });
   });
 });

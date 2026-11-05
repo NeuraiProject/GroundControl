@@ -7,7 +7,7 @@ import { KeyValue } from "./entity/KeyValue";
 import { TokenToTxid } from "./entity/TokenToTxid";
 import dataSource from "./data-source";
 import { components } from "./openapi/api";
-import { buildNeuraiRpcClient } from "./neurai-rpc-client";
+import { buildNeuraiRpcClient, RpcUnavailableError } from "./neurai-rpc-client";
 import { PaymentUtils } from "./utils/paymentUtils";
 require("dotenv").config();
 
@@ -75,8 +75,7 @@ async function processBlockNum(blockNum: number, sendQueueRepository: Repository
         const payload: components["schemas"]["PushNotificationOnchainAddressGotPaid"] = {
           address: payment.address,
           txid: tx.txid,
-          sat: payment.sat,
-          ...(payment.assets.length > 0 ? { assets: payment.assets } : {}),
+          ...PaymentUtils.toJson(payment),
           type: 2,
           level: "transactions",
           token: payment.token,
@@ -143,7 +142,8 @@ async function catchUpToTip(KeyValueRepository: Repository<KeyValue>, sendQueueR
       await processBlockNum(nextBlock, sendQueueRepository);
     } catch (error) {
       console.warn(`[${CHAIN}] exception processing block ${nextBlock}:`, error);
-      if ((error as Error).message?.includes("socket hang up")) return;
+      // An unreachable node is retried on the next catch-up rather than skipping the block.
+      if (error instanceof RpcUnavailableError || (error as Error).message?.includes("socket hang up")) return;
     }
     keyVal.value = String(nextBlock);
     await KeyValueRepository.save(keyVal);

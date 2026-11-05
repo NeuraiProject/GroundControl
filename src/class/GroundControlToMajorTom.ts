@@ -182,7 +182,7 @@ export class GroundControlToMajorTom {
     // One push covers everything the transaction paid this device, e.g. "+1.5 XNA, +10 MYASSET". Asset outputs
     // carry (normally) 0 XNA, so XNA is left out when only assets arrived.
     const amounts = (pushNotification.assets ?? []).map((asset) => "+" + AmountUtils.format(asset.amount) + " " + asset.name);
-    if (pushNotification.sat > 0 || amounts.length === 0) amounts.unshift("+" + AmountUtils.format(pushNotification.sat) + " XNA");
+    if (BigInt(pushNotification.sat ?? 0) > BigInt(0) || amounts.length === 0) amounts.unshift("+" + AmountUtils.format(pushNotification.sat ?? 0) + " XNA");
     const title = amounts.join(", ");
     const fcmPayload = {
       message: {

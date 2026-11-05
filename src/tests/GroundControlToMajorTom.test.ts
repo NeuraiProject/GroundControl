@@ -386,6 +386,12 @@ describe("GroundControlToMajorTom", () => {
       ];
       expect(await titleFor({ ...mockPushNotification, sat: 898996868500, assets })).toBe("+8989.968685 XNA, +1 &CHAT!, +999999 &CHAT");
     });
+
+    it("should show amounts beyond 2^53 base units with every digit", async () => {
+      // The workers queue such amounts as digit strings.
+      const assets = [{ name: "BIG", amount: "100000000012345678" }];
+      expect(await titleFor({ ...mockPushNotification, sat: "12000000000000003", assets })).toBe("+120000000.00000003 XNA, +1000000000.12345678 BIG");
+    });
   });
 
   // Lightning support removed in the Neurai fork; tests intentionally dropped.
